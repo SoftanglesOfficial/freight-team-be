@@ -1,0 +1,27 @@
+import { Global, Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
+import { MailerService } from './mailer.service';
+import { MailerProcessor } from './mailer.processor';
+import { BullModule } from '@nestjs/bullmq';
+
+@Global()
+@Module({
+  imports: [
+    ConfigModule,
+    BullModule.registerQueue({
+      name: 'mailer',
+      defaultJobOptions: {
+        removeOnComplete: true,
+        removeOnFail: false,
+        attempts: 3,
+        backoff: {
+          type: 'exponential',
+          delay: 2000,
+        },
+      },
+    }),
+  ],
+  providers: [MailerService, MailerProcessor],
+  exports: [MailerService],
+})
+export class MailerModule {}

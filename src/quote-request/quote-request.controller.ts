@@ -71,6 +71,15 @@ export class QuoteRequestController extends BaseController {
     return this.quoteRequestService.findOne(id);
   }
 
+  @Public()
+  @Post(':id/decline', { response: QuoteRequest, status: HttpStatus.OK })
+  async decline(
+    @Param('id') id: string,
+    @Body() body: { feedback: any },
+  ): Promise<QuoteRequest> {
+    return this.quoteRequestService.declineQuote(id, body.feedback);
+  }
+
   @Roles(Role.SUPER_ADMIN)
   @Patch(':id')
   async update(

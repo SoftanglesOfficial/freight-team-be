@@ -161,6 +161,28 @@ export class QuoteRequestService {
     return quoteObj as QuoteRequest;
   }
 
+  async declineQuote(id: string, feedback: any): Promise<QuoteRequest> {
+    const quote = await this.quoteModel
+      .findByIdAndUpdate(
+        id,
+        { status: QuoteRequestStatus.DECLINED, feedback },
+        { new: true },
+      )
+      .orFail(new NotFoundException('Quote request not found'));
+
+    let user: any = null;
+    try {
+      user = this.requestContext.getUser();
+    } catch {}
+
+    await this.eventEmitter.emitAsync(
+      'action',
+      new QuoteFollowUpAction(user, quote),
+    );
+
+    return quote.toObject() as QuoteRequest;
+  }
+
   async acceptAndConvert(id: string, data: any): Promise<Shipment> {
     const quote = await this.quoteModel
       .findById(id)

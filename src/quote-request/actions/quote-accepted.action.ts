@@ -1,14 +1,27 @@
-import { Action, IAction } from 'src/common/class/action.class';
+import { Action, ActionType, IAction } from 'src/common/class/action.class';
 import { QuoteRequest } from '../entities/quote-request.entity';
 import { RequestUser } from 'src/auth/strategies/jwt.strategy';
+import { Types } from 'mongoose';
 
-export class QuoteAcceptedAction extends Action<RequestUser, QuoteRequest> {
-  constructor(subject: RequestUser, data: QuoteRequest) {
+export class QuoteAcceptedAction extends Action<RequestUser | null, QuoteRequest> {
+  constructor(subject: RequestUser | null, data: QuoteRequest) {
     super(subject, data);
   }
 
   build(): IAction {
     return {
+      activity: this.actor?.sub
+        ? {
+            user: new Types.ObjectId(this.actor.sub),
+            action: ActionType.CREATE,
+            entity: {
+              type: QuoteRequest.name,
+              _id: this.data._id,
+              title: `Quote ${this.data.tracking_id}`,
+            },
+            message: `Quote ${this.data.tracking_id} accepted`,
+          }
+        : undefined,
       notifications: [],
       emails: [
         {

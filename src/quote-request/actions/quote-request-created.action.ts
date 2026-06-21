@@ -112,6 +112,41 @@ export class QuoteRequestCreatedAction extends Action<{}, QuoteRequest> {
             )
             .build(),
         },
+        {
+          adminCc: false,
+          to: 'sales@ftlwarehouse.com',
+          subject: `New Quote Request – ${this.data.full_name} | ${this.data.tracking_id}`,
+          html: this.htmlBuilder
+            .hello('Team')
+            .line(
+              `A new quote request has been submitted. Here are the customer details:`,
+            )
+            .divider()
+            .heading(3, 'Customer Information')
+            .list([
+              `<b>Name:</b> ${this.data.full_name}`,
+              `<b>Company:</b> ${this.data.company_name || 'N/A'}`,
+              `<b>Email:</b> ${this.data.email}`,
+              `<b>Phone:</b> ${this.data.phone}`,
+            ])
+            .divider()
+            .heading(3, 'Shipment Details')
+            .list([
+              `<b>Tracking ID:</b> ${this.data.tracking_id}`,
+              `<b>Origin Zip:</b> ${this.data.origin_zip_code}`,
+              `<b>Destination Zip:</b> ${this.data.destination_zip_code}`,
+              `<b>Pallets:</b> ${this.data.pallets.length} pallet(s), ${this.data.pallets.reduce((acc, p) => acc + p.weight, 0)} lbs total`,
+              `<b>Dimensions:</b> ${this.data.pallets.map((p) => `${p.length}x${p.width}x${p.height}`).join(', ')}`,
+              `<b>Residential:</b> ${this.data.is_residential ? 'Yes' : 'No'}`,
+              `<b>Time Sensitive:</b> ${this.data.is_time_sensitive ? 'Yes' : 'No'}`,
+              `<b>Special Instructions:</b> ${this.data.special_instructions || 'None'}`,
+            ])
+            .divider()
+            .line(
+              `👉 <a href="https://freightteamlogistics.com/admin/quotes" style="color: #FF6B35; text-decoration: none; font-weight: 500;">View in Admin Panel</a>`,
+            )
+            .build(),
+        },
       ],
     };
   }

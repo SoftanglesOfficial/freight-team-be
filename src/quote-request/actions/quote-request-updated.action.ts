@@ -38,9 +38,8 @@ export class QuoteRequestUpdatedAction extends Action<RequestUser, QuoteRequest>
                   .divider()
                   .heading(3, 'View Your Quote')
                   .line(
-                    `👉 <a href="https://freightteamlogistics.com/track-shipment" style="color: #FF6B35; text-decoration: none; font-weight: 500;">View & Book Your Shipment</a> - Most customers book in under 2 minutes.`,
+                    `👉 <a href="https://freightteamlogistics.com/track-shipment?ftl-id=${this.data.tracking_id}" style="color: #FF6B35; text-decoration: none; font-weight: 500;">View & Book Your Shipment</a> - Most customers book in under 2 minutes.`,
                   )
-                  .line(`Use your tracking ID: <b>${this.data.tracking_id}</b>`)
                   .space()
                   .line(`Inside, you'll be able to:`)
                   .list(["<b>Review your Quote details and choose what's easiest</b>"])

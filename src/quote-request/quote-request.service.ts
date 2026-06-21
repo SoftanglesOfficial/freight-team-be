@@ -239,14 +239,17 @@ export class QuoteRequestService {
       status: QuoteRequestStatus.ACCEPTED,
     });
 
-    let user: any = null;
+    let actor: any = null;
     try {
-      user = this.requestContext.getUser();
+      actor = this.requestContext.getUser();
     } catch {}
 
     await this.eventEmitter.emitAsync(
       'action',
-      new QuoteAcceptedAction(user, quote),
+      new QuoteAcceptedAction(
+        actor,
+        quote.toObject ? quote.toObject() : quote,
+      ),
     );
 
     return shipment;

@@ -8,6 +8,15 @@ export class QuoteFollowUpAction extends Action<RequestUser, QuoteRequest> {
   }
 
   build(): IAction {
+    const feedback = this.data.feedback || {};
+    const declineDetails = [
+      `<b>Reason:</b> ${feedback.reason || 'Not specified'}`,
+      feedback.paidPrice ? `<b>Price They Paid:</b> $${feedback.paidPrice}` : null,
+      feedback.chosenCarrier ? `<b>Carrier They Chose:</b> ${feedback.chosenCarrier}` : null,
+      feedback.targetPrice ? `<b>Target / Counteroffer Price:</b> $${feedback.targetPrice}` : null,
+      feedback.otherReason ? `<b>Additional Notes:</b> ${feedback.otherReason}` : null,
+    ].filter((item): item is string => item !== null);
+
     return {
       notifications: [],
       emails: [
@@ -39,6 +48,35 @@ export class QuoteFollowUpAction extends Action<RequestUser, QuoteRequest> {
             .space()
             .line(`📧 Sales@FTLwarehouse.com`)
             .line(`📞 Office: (626) 765-6175`)
+            .build(),
+        },
+        {
+          adminCc: false,
+          to: 'sales@ftlwarehouse.com',
+          subject: `Quote Declined – ${this.data.tracking_id} | ${this.data.full_name}`,
+          html: this.htmlBuilder
+            .hello('Mandy')
+            .line(
+              `<b>${this.data.full_name}</b> has declined quote <b>${this.data.tracking_id}</b>.`,
+            )
+            .divider()
+            .heading(3, 'Customer Details')
+            .list([
+              `<b>Name:</b> ${this.data.full_name}`,
+              `<b>Email:</b> ${this.data.email}`,
+              `<b>Phone:</b> ${this.data.phone}`,
+              `<b>Company:</b> ${this.data.company_name || 'N/A'}`,
+            ])
+            .divider()
+            .heading(3, 'Shipment')
+            .list([
+              `<b>Route:</b> ${this.data.origin_zip_code} → ${this.data.destination_zip_code}`,
+              `<b>Tracking ID:</b> ${this.data.tracking_id}`,
+              `<b>Quote Amount:</b> ${this.data.quoteAmount != null ? `$${this.data.quoteAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}` : 'N/A'}`,
+            ])
+            .divider()
+            .heading(3, 'Decline Reason')
+            .list(declineDetails)
             .build(),
         },
       ],

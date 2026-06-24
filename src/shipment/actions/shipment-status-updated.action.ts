@@ -76,7 +76,7 @@ export class ShipmentStatusUpdatedAction extends Action<RequestUser, Shipment> {
     }
 
     const lastHistory = this.data.status_history?.[this.data.status_history.length - 1];
-    const trackingUrl = `${this.configService.get<string>('NEXT_PUBLIC_FRONTEND_URL')}/track-shipment?pro-number=${this.data.proNumber}`;
+    const trackingUrl = `${this.configService.get<string>('NEXT_PUBLIC_FRONTEND_URL')}/track-shipment?ftl-id=${this.data.proNumber}`;
 
     let emailSubject = `Shipment Status Updated - ${this.data.proNumber}`;
     let emailHtml = '';

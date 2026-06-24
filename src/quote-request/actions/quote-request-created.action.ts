@@ -45,7 +45,7 @@ export class QuoteRequestCreatedAction extends Action<{}, QuoteRequest> {
             .heading(2, this.data.tracking_id)
             .line(`You can track the status of your quote anytime here:`)
             .line(
-              `👉 <a href="https://freightteamlogistics.com/track-shipment" style="color: #FF6B35; text-decoration: none; font-weight: 500;">Track Your Quote</a>`,
+              `👉 <a href="https://freightteamlogistics.com/track-shipment?ftl-id=${this.data.tracking_id}" style="color:#FF6B35;font-weight:500;text-decoration:none;">Track Your Quote</a>`,
             )
             .space()
             .line(`Status updates will show:`)

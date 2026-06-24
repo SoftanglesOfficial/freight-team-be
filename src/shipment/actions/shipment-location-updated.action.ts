@@ -47,7 +47,7 @@ export class ShipmentLocationUpdatedAction extends Action<RequestUser, Shipment>
       lastHistory?.note && lastHistory.note !== 'Location updated'
         ? lastHistory.note
         : null;
-    const trackingUrl = `${this.configService.get<string>('NEXT_PUBLIC_FRONTEND_URL')}/track-shipment?pro-number=${this.data.proNumber}`;
+    const trackingUrl = `${this.configService.get<string>('NEXT_PUBLIC_FRONTEND_URL')}/track-shipment?ftl-id=${this.data.proNumber}`;
 
     const emailSubject = adminNote
       ? `Shipment Update – ${adminNote.slice(0, 50)}${adminNote.length > 50 ? '...' : ''} | ${this.data.proNumber}`

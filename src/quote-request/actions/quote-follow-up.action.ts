@@ -80,7 +80,6 @@ export class QuoteFollowUpAction extends Action<RequestUser, QuoteRequest> {
           adminCc: true,
           to: this.data.email,
           subject: `Following up on your shipment: ${this.data.origin_zip_code} to ${this.data.destination_zip_code}`,
-          delay: 5 * 24 * 60 * 60 * 1000, // 5 days in milliseconds
           html: customerEmailHtml,
         },
         {

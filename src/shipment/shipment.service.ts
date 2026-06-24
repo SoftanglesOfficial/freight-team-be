@@ -114,7 +114,7 @@ export class ShipmentService {
       await this.eventEmitter.emitAsync('action', new ShipmentCreatedAction(user, shipment));
     } catch (error) {
       // If no user context (system operation), use system user
-      const systemUser = this.requestContext.getUser();
+      const systemUser = await this.requestContext.getSystemUser();
       await this.eventEmitter.emitAsync('action', new ShipmentCreatedAction(systemUser, shipment));
     }
 
@@ -245,6 +245,7 @@ export class ShipmentService {
     return this.shipmentModel
       .findById(id)
       .populate('quote')
+      .populate('customer_id', 'first_name last_name email')
       .orFail(new NotFoundException('Shipment not found'));
   }
 
@@ -312,6 +313,7 @@ export class ShipmentService {
         { new: true },
       )
       .populate('quote')
+      .populate('customer_id', 'first_name last_name email')
       .orFail(new NotFoundException('Shipment not found'));
 
     // Emit status updated event if status changed
@@ -323,8 +325,7 @@ export class ShipmentService {
           new ShipmentStatusUpdatedAction(user, updatedShipment, { oldStatus }),
         );
       } catch (error) {
-        // If no user context (system operation), use system user
-        const systemUser = this.requestContext.getUser();
+        const systemUser = await this.requestContext.getSystemUser();
         await this.eventEmitter.emitAsync(
           'action',
           new ShipmentStatusUpdatedAction(systemUser, updatedShipment, { oldStatus }),
@@ -442,6 +443,7 @@ export class ShipmentService {
         { new: true },
       )
       .populate('quote')
+      .populate('customer_id', 'first_name last_name email')
       .orFail(new NotFoundException('Shipment not found'));
 
     // Emit location updated event
@@ -452,7 +454,6 @@ export class ShipmentService {
         new ShipmentLocationUpdatedAction(user, updatedShipment),
       );
     } catch (error) {
-      // If no user context (system operation), use system user
       const systemUser = await this.requestContext.getSystemUser();
       await this.eventEmitter.emitAsync(
         'action',
@@ -482,7 +483,22 @@ export class ShipmentService {
         { new: true },
       )
       .populate('quote')
+      .populate('customer_id', 'first_name last_name email')
       .orFail(new NotFoundException('Shipment not found'));
+
+    try {
+      const user = this.requestContext.getUser();
+      await this.eventEmitter.emitAsync(
+        'action',
+        new ShipmentLocationUpdatedAction(user, updatedShipment),
+      );
+    } catch (error) {
+      const systemUser = await this.requestContext.getSystemUser();
+      await this.eventEmitter.emitAsync(
+        'action',
+        new ShipmentLocationUpdatedAction(systemUser, updatedShipment),
+      );
+    }
 
     return updatedShipment;
   }

@@ -4,6 +4,7 @@ import { RequestUser } from 'src/auth/strategies/jwt.strategy';
 import { Types } from 'mongoose';
 import { SHIPMENT_EVENTS } from '../shipment.events';
 import { ConfigService } from '@nestjs/config';
+import { resolveShipmentCustomerContact } from 'src/common/utils/resolve-customer-contact.util';
 
 export class ShipmentLocationUpdatedAction extends Action<RequestUser, Shipment> {
   private readonly configService = new ConfigService();
@@ -39,8 +40,11 @@ export class ShipmentLocationUpdatedAction extends Action<RequestUser, Shipment>
   }
 
   build(): IAction {
-    const customerEmail = this.data.customer?.email;
-    const customerName = this.data.customer?.name || 'Customer';
+    const linkedCustomer = (this.data as any).customer_id;
+    const { email: customerEmail, name: customerName } = resolveShipmentCustomerContact(
+      this.data as any,
+      typeof linkedCustomer === 'object' && linkedCustomer?.email ? linkedCustomer : null,
+    );
     const currentLocation = this.data.current_location;
     const lastHistory = this.data.status_history?.[this.data.status_history.length - 1];
     const adminNote =

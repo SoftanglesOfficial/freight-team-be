@@ -34,9 +34,20 @@ export class DocumentUploadedAction extends Action<RequestUser, Document> {
 
   async build(): Promise<IAction> {
     const customer = this.data.customer as any;
-    const customerEmail = customer?.email;
-    const customerName = customer?.first_name ? `${customer.first_name} ${customer.last_name}` : 'Customer';
     const shipment = this.data.shipment_id as any;
+    const customerEmail =
+      customer?.email ||
+      shipment?.customer?.email ||
+      shipment?.customer_email ||
+      shipment?.email ||
+      null;
+
+    const customerName = customer?.first_name
+      ? `${customer.first_name} ${customer.last_name || ''}`.trim()
+      : shipment?.customer?.name ||
+        shipment?.full_name ||
+        shipment?.customer_name ||
+        'Customer';
     const proNumber = shipment?.proNumber || 'N/A';
 
     // Only send email for BOL and Invoice categories

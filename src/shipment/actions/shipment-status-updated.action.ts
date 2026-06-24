@@ -53,9 +53,11 @@ export class ShipmentStatusUpdatedAction extends Action<RequestUser, Shipment> {
     const customerName = this.data.customer?.name || 'Customer';
     const oldStatus = this.changes?.oldStatus || 'Unknown';
     const newStatus = this.data.status || 'Unknown';
+    const oldStatusNorm = String(oldStatus).toLowerCase();
+    const newStatusNorm = String(newStatus).toLowerCase();
 
     // Only send email if status actually changed
-    if (oldStatus === newStatus) {
+    if (oldStatusNorm === newStatusNorm) {
       return {
         activity: {
           user: new Types.ObjectId(this.actor.sub),
@@ -79,7 +81,7 @@ export class ShipmentStatusUpdatedAction extends Action<RequestUser, Shipment> {
     let emailSubject = `Shipment Status Updated - ${this.data.proNumber}`;
     let emailHtml = '';
 
-    if (newStatus === 'in-transit') {
+    if (newStatusNorm === 'in-transit') {
       emailSubject = `Shipment In Transit – ${this.data.proNumber}`;
       emailHtml = this.htmlBuilder
         .hello(customerName)
@@ -117,7 +119,7 @@ export class ShipmentStatusUpdatedAction extends Action<RequestUser, Shipment> {
           `If you need a status check, updated ETA, or assistance, just reply to this email or log into your online account.`,
         )
         .build();
-    } else if (newStatus === 'delivered') {
+    } else if (newStatusNorm === 'delivered') {
       emailSubject = `Delivered – ${this.data.proNumber}`;
       emailHtml = this.htmlBuilder
         .hello(customerName)
@@ -142,6 +144,41 @@ export class ShipmentStatusUpdatedAction extends Action<RequestUser, Shipment> {
         .divider()
         .line(
           `Thank you for trusting us with your shipment. If you have another load coming up, we're ready when you are.`,
+        )
+        .build();
+    } else if (newStatusNorm === 'invoice-ready') {
+      emailSubject = `Invoice Ready – ${this.data.proNumber} | Payment Options`;
+      emailHtml = this.htmlBuilder
+        .hello(customerName)
+        .line(`Your invoice for shipment <b>${this.data.proNumber}</b> is now ready.`)
+        .divider()
+        .heading(3, 'Invoice Details')
+        .list([
+          `<b>Shipment Reference:</b> ${this.data.proNumber}`,
+          `<b>Carrier:</b> ${this.data.carrierName || 'N/A'}`,
+        ])
+        .divider()
+        .heading(3, 'View & Download Invoice')
+        .line(
+          `👉 <a href="https://freightteamlogistics.com/auth/login" style="color:#FF6B35;font-weight:500;text-decoration:none;">View Invoice in Your Account</a>`,
+        )
+        .divider()
+        .heading(3, 'Payment Options')
+        .line('We accept the following:')
+        .list([
+          'ACH / Bank Transfer',
+          'Zelle',
+          'Wire Transfer',
+          'Check (mailed to address on invoice)',
+          'Credit Card (by phone)',
+        ])
+        .line(
+          `For payment instructions or to pay by phone, reply to this email. For fastest processing, ACH or Zelle is preferred.`,
+        )
+        .divider()
+        .heading(3, 'Questions or Disputes')
+        .line(
+          `If you have any questions regarding your invoice, reply to this email or contact us at <a href="mailto:sales@ftlwarehouse.com" style="color:#FF6B35;">sales@ftlwarehouse.com</a>.`,
         )
         .build();
     } else {
@@ -180,7 +217,7 @@ export class ShipmentStatusUpdatedAction extends Action<RequestUser, Shipment> {
         message: `${this.actor.first_name} updated shipment ${this.data.proNumber} status from ${oldStatus} to ${newStatus}`,
       },
       notifications: [],
-      emails: customerEmail
+      emails: customerEmail && emailHtml
         ? [
             {
               adminCc: true,

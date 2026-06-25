@@ -7,6 +7,7 @@ import { Document, DocumentSchema } from '../document/entities/document.entity';
 import { QuoteRequest, QuoteRequestSchema } from '../quote-request/entities/quote-request.entity';
 
 import { UserModule } from '../user/user.module';
+import { DocumentModule } from '../document/document.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { UserModule } from '../user/user.module';
       { name: QuoteRequest.name, schema: QuoteRequestSchema },
     ]),
     UserModule,
+    DocumentModule,
   ],
   controllers: [ShipmentController],
   providers: [ShipmentService],

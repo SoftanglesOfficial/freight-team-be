@@ -16,6 +16,7 @@ import type { Request } from 'express';
 import { UserService } from 'src/user/user.service';
 import { RequestContextService } from 'src/request-context/request-context.service';
 import { ShipmentQueryDto } from './dto/shipment-query.dto';
+import { DocumentService } from 'src/document/document.service';
 
 @Injectable()
 export class ShipmentService {
@@ -26,6 +27,7 @@ export class ShipmentService {
     private readonly eventEmitter: EventEmitter2,
     private readonly requestContext: RequestContextService,
     private readonly userService: UserService,
+    private readonly documentService: DocumentService,
   ) {}
 
   private async generateProNumber(): Promise<string> {
@@ -126,11 +128,12 @@ export class ShipmentService {
 
       if (validDocIds.length > 0) {
         const updateData: any = { shipment_id: shipment._id };
-        if (createShipmentDto.customer_id) {
-          updateData.customer = new Types.ObjectId(createShipmentDto.customer_id);
+        if (customerId) {
+          updateData.customer = customerId;
         }
 
         await this.documentModel.updateMany({ _id: { $in: validDocIds } }, { $set: updateData });
+        await this.documentService.emitUploadEmailsForDocuments(validDocIds);
       }
     }
 

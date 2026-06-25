@@ -62,22 +62,14 @@ export class DocumentService {
       const document = new this.documentModel(documentData);
       const savedDocument = await document.save();
 
-      // Emit action event (async)
-      try {
-        const populatedDocument = await this.documentModel
-          .findById(savedDocument._id)
-          .populate('shipment_id')
-          .populate('customer')
-          .exec();
-
-        if (populatedDocument) {
-          await this.eventEmitter.emitAsync(
-            'action',
-            new DocumentUploadedAction(this.requestContext.getUser(), populatedDocument),
-          );
+      // Email when already linked to a shipment (edit flow). Create-shipment flow
+      // uploads BOL first, then links on save — emails fire from shipment.service.
+      if (createDocumentDto.shipment_id) {
+        try {
+          await this.emitUploadEmailsForDocuments([savedDocument._id]);
+        } catch (error) {
+          console.error('Failed to emit DocumentUploadedAction:', error.message);
         }
-      } catch (error) {
-        console.error('Failed to emit DocumentUploadedAction:', error.message);
       }
 
       return savedDocument;
@@ -295,12 +287,46 @@ export class DocumentService {
       throw new BadRequestException('This document is not a BOL');
     }
 
-    await this.eventEmitter.emitAsync(
-      'action',
-      new DocumentUploadedAction(this.requestContext.getUser(), document),
-    );
+    await this.emitUploadEmailsForDocuments([document._id]);
 
     return { message: 'BOL email sent successfully' };
+  }
+
+  async emitUploadEmailsForDocuments(
+    documentIds: (string | Types.ObjectId)[],
+  ): Promise<void> {
+    const ids = documentIds
+      .filter((id) => id && Types.ObjectId.isValid(id.toString()))
+      .map((id) => new Types.ObjectId(id.toString()));
+
+    if (ids.length === 0) return;
+
+    let actor;
+    try {
+      actor = this.requestContext.getUser();
+    } catch {
+      actor = await this.requestContext.getSystemUser();
+    }
+
+    const documents = await this.documentModel
+      .find({
+        _id: { $in: ids },
+        category: { $in: [DocumentCategory.BOL, DocumentCategory.INVOICE] },
+      })
+      .populate('shipment_id')
+      .populate('customer')
+      .exec();
+
+    for (const document of documents) {
+      try {
+        await this.eventEmitter.emitAsync(
+          'action',
+          new DocumentUploadedAction(actor, document),
+        );
+      } catch (error) {
+        console.error('Failed to emit DocumentUploadedAction:', error.message);
+      }
+    }
   }
 
   private async generateUniqueInternalId(): Promise<string> {

@@ -63,7 +63,7 @@ export class QuoteFollowUpAction extends Action<RequestUser, QuoteRequest> {
           feedback.reason ? `<b>Reason:</b> ${feedback.reason}` : null,
           feedback.paidPrice ? `<b>Price They Paid:</b> $${feedback.paidPrice}` : null,
           feedback.chosenCarrier ? `<b>Carrier They Chose:</b> ${feedback.chosenCarrier}` : null,
-          feedback.targetPrice ? `<b>Target Price:</b> $${feedback.targetPrice}` : null,
+          feedback.targetPrice ? `<b>Target Price:</b> ${feedback.targetPrice}` : null,
           feedback.otherReason ? `<b>Notes:</b> ${feedback.otherReason}` : null,
         ].filter((item): item is string => item !== null),
       )

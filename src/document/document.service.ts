@@ -35,12 +35,30 @@ export class DocumentService {
 
       let customerId = createDocumentDto.customer_id;
 
+      let fallbackEmail: string | null = null;
+      let fallbackName: string | null = null;
+
       // Automated assignment: If customer_id is missing but shipment_id is present,
       // inherit the customer from the shipment.
       if (!customerId && createDocumentDto.shipment_id) {
-        const shipment = await this.shipmentModel.findById(createDocumentDto.shipment_id);
-        if (shipment && shipment.customer_id) {
-          customerId = shipment.customer_id.toString();
+        const shipment = await this.shipmentModel.findById(
+          createDocumentDto.shipment_id,
+        );
+        if (shipment) {
+          if (shipment.customer_id) {
+            customerId = shipment.customer_id.toString();
+          }
+          // Store fallback contact info for emails when no User account exists
+          fallbackEmail =
+            shipment.customer?.email ||
+            shipment.email ||
+            shipment.customer_email ||
+            null;
+          fallbackName =
+            shipment.customer?.name ||
+            shipment.full_name ||
+            shipment.customer_name ||
+            null;
         }
       }
 
@@ -54,9 +72,9 @@ export class DocumentService {
         quote_request_id: createDocumentDto.quote_request_id
           ? new Types.ObjectId(createDocumentDto.quote_request_id)
           : undefined,
-        customer: customerId
-          ? new Types.ObjectId(customerId)
-          : undefined,
+        customer: customerId ? new Types.ObjectId(customerId) : undefined,
+        fallback_email: fallbackEmail,
+        fallback_name: fallbackName,
       };
 
       const document = new this.documentModel(documentData);

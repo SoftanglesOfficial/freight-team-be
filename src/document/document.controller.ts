@@ -1,10 +1,14 @@
-import { Controller, Body, Patch, Param, Delete, Query, HttpStatus, Req } from '@nestjs/common';
+import { Controller, Body, Patch, Param, Delete, Query, HttpStatus, Req, UploadedFile, UseInterceptors } from '@nestjs/common';
 import type { Request } from 'express';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { ApiBody, ApiConsumes } from '@nestjs/swagger';
 import { DocumentService } from './document.service';
+import { BolParserService } from './bol-parser.service';
 import { CreateDocumentDto } from './dto/create-document.dto';
 import { UpdateDocumentDto } from './dto/update-document.dto';
 import { DocumentQueryDto } from './dto/document-query.dto';
 import { PaginatedDocumentsDto } from './dto/paginated-documents.dto';
+import { ParseBolResponseDto } from './dto/parse-bol-response.dto';
 import { Document } from './entities/document.entity';
 import { Roles, Role } from 'src/roles/roles.decorator';
 import { Get, Post } from 'src/common/decorators/http.decorator';
@@ -14,7 +18,10 @@ import { ApiTags, ApiResponse } from '@nestjs/swagger';
 @ApiTags('Document')
 @Controller('document')
 export class DocumentController extends BaseController {
-  constructor(private readonly documentService: DocumentService) {
+  constructor(
+    private readonly documentService: DocumentService,
+    private readonly bolParserService: BolParserService,
+  ) {
     super();
   }
 
@@ -30,6 +37,36 @@ export class DocumentController extends BaseController {
   ): Promise<Document> {
     await this.authorize(req.user.roles.includes(Role.SUPER_ADMIN));
     return this.documentService.create(createDocumentDto);
+  }
+
+  @Roles(Role.SUPER_ADMIN)
+  @Post('/parse-bol', {
+    response: ParseBolResponseDto,
+    status: HttpStatus.OK,
+    description: 'Parse a BOL PDF and extract shipment fields (Super Admin only)',
+  })
+  @UseInterceptors(FileInterceptor('file'))
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    description: 'BOL PDF file to parse',
+    schema: {
+      type: 'object',
+      properties: {
+        file: {
+          type: 'string',
+          format: 'binary',
+          description: 'Bill of Lading PDF (max 10MB)',
+        },
+      },
+      required: ['file'],
+    },
+  })
+  async parseBol(
+    @UploadedFile() file: Express.Multer.File,
+    @Req() req: Request,
+  ): Promise<ParseBolResponseDto> {
+    await this.authorize(req.user.roles.includes(Role.SUPER_ADMIN));
+    return this.bolParserService.parseBolPdf(file);
   }
 
   @Roles(Role.SUPER_ADMIN, Role.STANDARD_USER)

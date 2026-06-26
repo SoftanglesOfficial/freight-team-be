@@ -40,6 +40,7 @@ export class DocumentUploadedAction extends Action<RequestUser, Document> {
       shipment?.customer?.email ||
       shipment?.customer_email ||
       shipment?.email ||
+      this.data.fallback_email ||
       null;
 
     const customerName = customer?.first_name
@@ -47,6 +48,7 @@ export class DocumentUploadedAction extends Action<RequestUser, Document> {
       : shipment?.customer?.name ||
         shipment?.full_name ||
         shipment?.customer_name ||
+        this.data.fallback_name ||
         'Customer';
     const proNumber = shipment?.proNumber || 'N/A';
 

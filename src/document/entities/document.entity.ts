@@ -107,6 +107,14 @@ export class Document extends Entity {
     index: true,
   })
   customer?: Types.ObjectId | User;
+
+  @ApiProperty({ required: false })
+  @Prop({ type: String, required: false })
+  fallback_email?: string;
+
+  @ApiProperty({ required: false })
+  @Prop({ type: String, required: false })
+  fallback_name?: string;
 }
 
 export const DocumentSchema = SchemaFactory.createForClass(Document);

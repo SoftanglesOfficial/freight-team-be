@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { DocumentController } from './document.controller';
 import { DocumentService } from './document.service';
+import { BolParserService } from './bol-parser.service';
 import { Document, DocumentSchema } from './entities/document.entity';
 import { Shipment, ShipmentSchema } from 'src/shipment/entities/shipment.entity';
 
@@ -13,7 +14,7 @@ import { Shipment, ShipmentSchema } from 'src/shipment/entities/shipment.entity'
     ]),
   ],
   controllers: [DocumentController],
-  providers: [DocumentService],
+  providers: [DocumentService, BolParserService],
   exports: [DocumentService],
 })
 export class DocumentModule {}

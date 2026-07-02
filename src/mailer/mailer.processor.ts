@@ -2,32 +2,29 @@ import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Job } from 'bullmq';
-import * as nodemailer from 'nodemailer';
+import { Resend } from 'resend';
 import { EmailOptions } from './interface/email-options.interface';
 
 @Injectable()
 @Processor('mailer')
 export class MailerProcessor extends WorkerHost {
   private readonly logger = new Logger(MailerProcessor.name);
-  private transporter: nodemailer.Transporter;
+  private readonly resend: Resend;
+  private readonly fromAddress: string;
 
   constructor(private readonly configService: ConfigService) {
     super();
-    this.createTransporter();
-  }
 
-  private createTransporter(): void {
-    const smtpConfig = {
-      host: this.configService.get<string>('MAIL_HOST'),
-      port: this.configService.get<number>('MAIL_PORT', 587),
-      // secure: this.configService.get<boolean>('MAIL_SECURE', false),
-      auth: {
-        user: this.configService.get<string>('MAIL_USER'),
-        pass: this.configService.get<string>('MAIL_PASS'),
-      },
-    };
+    const apiKey = this.configService.get<string>('RESEND_API_KEY');
+    if (!apiKey) {
+      this.logger.warn('RESEND_API_KEY is not set — outbound emails will fail');
+    }
 
-    this.transporter = nodemailer.createTransport(smtpConfig);
+    this.resend = new Resend(apiKey);
+    this.fromAddress = this.configService.get<string>(
+      'MAIL_FROM',
+      'Freight Team <noreply@ftlwarehouse.com>',
+    );
   }
 
   async process(job: Job<EmailOptions>): Promise<void> {
@@ -36,32 +33,41 @@ export class MailerProcessor extends WorkerHost {
     );
 
     try {
-      const mailOptions = {
-        from: this.configService.get<string>('MAIL_FROM'),
-        to: Array.isArray(job.data.to) ? job.data.to.join(', ') : job.data.to,
-        cc: job.data.cc
-          ? Array.isArray(job.data.cc)
-            ? job.data.cc.join(', ')
-            : job.data.cc
-          : undefined,
-        bcc: job.data.bcc
-          ? Array.isArray(job.data.bcc)
-            ? job.data.bcc.join(', ')
-            : job.data.bcc
-          : undefined,
-        subject: job.data.subject,
-        text: job.data.text,
-        html: job.data.html,
-        attachments: job.data.attachments,
-      };
+      const to = this.toArray(job.data.to);
+      const cc = job.data.cc ? this.toArray(job.data.cc) : undefined;
+      const bcc = job.data.bcc ? this.toArray(job.data.bcc) : undefined;
 
-      await this.transporter.sendMail(mailOptions);
+      if (!job.data.html && !job.data.text) {
+        this.logger.error(`Email job ${job.id} has no html or text content`);
+        return;
+      }
+
+      const { error } = await this.resend.emails.send({
+        from: this.fromAddress,
+        to,
+        cc,
+        bcc,
+        subject: job.data.subject,
+        ...(job.data.html ? { html: job.data.html } : { text: job.data.text! }),
+        ...(job.data.html && job.data.text ? { text: job.data.text } : {}),
+        attachments: job.data.attachments?.map((attachment) => ({
+          filename: attachment.filename,
+          content:
+            attachment.content instanceof Buffer
+              ? attachment.content
+              : Buffer.from(attachment.content),
+          contentType: attachment.contentType,
+        })),
+      });
+
+      if (error) {
+        this.logger.error(`Email job ${job.id} failed:`, error);
+        return;
+      }
 
       this.logger.log(`Email job ${job.id} completed successfully`);
     } catch (error) {
       this.logger.error(`Email job ${job.id} failed:`, error);
-      // Don't throw error to prevent server crash, just log it
-      // BullMQ will mark the job as failed automatically
     }
   }
 
@@ -71,5 +77,9 @@ export class MailerProcessor extends WorkerHost {
 
   onFailed(job: Job<EmailOptions>, err: Error): void {
     this.logger.error(`Email job ${job.id} failed:`, err);
+  }
+
+  private toArray(value: string | string[]): string[] {
+    return Array.isArray(value) ? value : [value];
   }
 }

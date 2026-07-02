@@ -12,6 +12,13 @@ import { Role } from 'src/roles/roles.decorator';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { DocumentUploadedAction } from './actions/document-uploaded.action';
 
+function toObjectId(id?: string | null): Types.ObjectId | undefined {
+  if (!id || typeof id !== 'string' || !Types.ObjectId.isValid(id)) {
+    return undefined;
+  }
+  return new Types.ObjectId(id);
+}
+
 @Injectable()
 export class DocumentService {
   constructor(
@@ -34,6 +41,9 @@ export class DocumentService {
       const internal_id = await this.generateUniqueInternalId();
 
       let customerId = createDocumentDto.customer_id;
+      if (customerId && !Types.ObjectId.isValid(customerId)) {
+        customerId = undefined;
+      }
 
       let fallbackEmail: string | null = null;
       let fallbackName: string | null = null;
@@ -66,13 +76,9 @@ export class DocumentService {
       const documentData = {
         ...createDocumentDto,
         internal_id,
-        shipment_id: createDocumentDto.shipment_id
-          ? new Types.ObjectId(createDocumentDto.shipment_id)
-          : undefined,
-        quote_request_id: createDocumentDto.quote_request_id
-          ? new Types.ObjectId(createDocumentDto.quote_request_id)
-          : undefined,
-        customer: customerId ? new Types.ObjectId(customerId) : undefined,
+        shipment_id: toObjectId(createDocumentDto.shipment_id),
+        quote_request_id: toObjectId(createDocumentDto.quote_request_id),
+        customer: toObjectId(customerId),
         fallback_email: fallbackEmail,
         fallback_name: fallbackName,
       };

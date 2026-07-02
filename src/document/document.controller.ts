@@ -3,12 +3,10 @@ import type { Request } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBody, ApiConsumes } from '@nestjs/swagger';
 import { DocumentService } from './document.service';
-import { BolParserService } from './bol-parser.service';
 import { CreateDocumentDto } from './dto/create-document.dto';
 import { UpdateDocumentDto } from './dto/update-document.dto';
 import { DocumentQueryDto } from './dto/document-query.dto';
 import { PaginatedDocumentsDto } from './dto/paginated-documents.dto';
-import { ParseBolResponseDto } from './dto/parse-bol-response.dto';
 import { Document } from './entities/document.entity';
 import { Roles, Role } from 'src/roles/roles.decorator';
 import { Get, Post } from 'src/common/decorators/http.decorator';
@@ -18,10 +16,7 @@ import { ApiTags, ApiResponse } from '@nestjs/swagger';
 @ApiTags('Document')
 @Controller('document')
 export class DocumentController extends BaseController {
-  constructor(
-    private readonly documentService: DocumentService,
-    private readonly bolParserService: BolParserService,
-  ) {
+  constructor(private readonly documentService: DocumentService) {
     super();
   }
 
@@ -41,7 +36,7 @@ export class DocumentController extends BaseController {
 
   @Roles(Role.SUPER_ADMIN)
   @Post('/parse-bol', {
-    response: ParseBolResponseDto,
+    response: Object,
     status: HttpStatus.OK,
     description: 'Parse a BOL PDF and extract shipment fields (Super Admin only)',
   })
@@ -61,12 +56,8 @@ export class DocumentController extends BaseController {
       required: ['file'],
     },
   })
-  async parseBol(
-    @UploadedFile() file: Express.Multer.File,
-    @Req() req: Request,
-  ): Promise<ParseBolResponseDto> {
-    await this.authorize(req.user.roles.includes(Role.SUPER_ADMIN));
-    return this.bolParserService.parseBolPdf(file);
+  async parseBol(@UploadedFile() file: Express.Multer.File): Promise<any> {
+    return this.documentService.parseBolPdf(file);
   }
 
   @Roles(Role.SUPER_ADMIN, Role.STANDARD_USER)

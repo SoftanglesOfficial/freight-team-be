@@ -310,6 +310,94 @@ export class DocumentService {
     return { message: 'BOL email sent successfully' };
   }
 
+  async parseBolPdf(file: Express.Multer.File): Promise<any> {
+    try {
+      const pdfParse = require('pdf-parse');
+      const data = await pdfParse(file.buffer);
+      const text = data.text;
+
+      if (!text || text.trim().length < 50) {
+        return {
+          success: false,
+          data: {},
+          error: 'Could not extract text from PDF. It may be a scanned image.',
+        };
+      }
+
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages: [
+            {
+              role: 'user',
+              content: `Extract the following fields from this Bill of Lading text and return ONLY a valid JSON object with no explanation, no markdown, no backticks:
+
+{
+  "shipper_business_name": "",
+  "shipper_address": "",
+  "shipper_city": "",
+  "shipper_state": "",
+  "shipper_zip": "",
+  "consignee_business_name": "",
+  "consignee_address": "",
+  "consignee_city": "",
+  "consignee_state": "",
+  "consignee_zip": "",
+  "pro_number": "",
+  "bol_number": "",
+  "carrier_name": "",
+  "carrier_quote_id": "",
+  "pieces": "",
+  "weight": "",
+  "freight_class": "",
+  "pallet_length": "",
+  "pallet_width": "",
+  "pallet_height": "",
+  "commodity": "",
+  "pickup_date": "",
+  "destination_accessorials": "",
+  "stackable": "",
+  "special_instructions": ""
+}
+
+Rules:
+- shipper = pickup location (where freight is collected FROM)
+- consignee = delivery location (where freight is going TO)  
+- If a field is not found, leave it as empty string
+- For weight, return numbers only, no units (e.g. "550" not "550 lbs")
+- For dimensions, return numbers only, no units (e.g. "48" not "48in")
+- For dates, return MM/DD/YYYY format
+- Do not guess or invent values
+
+BOL TEXT:
+${text}`,
+            },
+          ],
+          response_format: { type: 'json_object' },
+        }),
+      });
+
+      if (!response.ok) {
+        const err = await response.text();
+        throw new Error(`OpenAI API error: ${err}`);
+      }
+
+      const result = await response.json();
+      const content = result.choices?.[0]?.message?.content || '{}';
+      const parsed = JSON.parse(content);
+
+      return { success: true, data: parsed };
+    } catch (error) {
+      console.error('BOL parse error:', error.message);
+      return { success: false, data: {}, error: error.message };
+    }
+  }
+
   async emitUploadEmailsForDocuments(
     documentIds: (string | Types.ObjectId)[],
   ): Promise<void> {

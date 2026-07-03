@@ -74,9 +74,19 @@ export class ShipmentController extends BaseController {
     if (isStandardUser && !isSuperAdmin) {
       const user = req.user;
       const isOwnerById = shipment.customer_id?.toString() === user.sub;
-      const isOwnerByEmail = shipment.customer?.email?.toLowerCase() === user.email?.toLowerCase();
-      
-      if (!isOwnerById && !isOwnerByEmail) {
+      const isOwnerByEmail =
+        shipment.customer?.email &&
+        shipment.customer.email.toLowerCase() === user.email?.toLowerCase();
+
+      // Also check if the shipment appears in the user's allowed list
+      // by re-running the same filter the list uses
+      const isInUserScope = await this.shipmentService.isShipmentVisibleToUser(
+        shipment._id.toString(),
+        user.sub,
+        user.email,
+      );
+
+      if (!isOwnerById && !isOwnerByEmail && !isInUserScope) {
         await this.authorize(false);
       }
     }

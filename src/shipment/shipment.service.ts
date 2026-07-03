@@ -252,6 +252,21 @@ export class ShipmentService {
       .orFail(new NotFoundException('Shipment not found'));
   }
 
+  async isShipmentVisibleToUser(
+    shipmentId: string,
+    userSub: string,
+    userEmail: string,
+  ): Promise<boolean> {
+    const shipment = await this.shipmentModel.findOne({
+      _id: new Types.ObjectId(shipmentId),
+      $or: [
+        { customer_id: new Types.ObjectId(userSub) },
+        { 'customer.email': { $regex: `^${userEmail}$`, $options: 'i' } },
+      ],
+    });
+    return !!shipment;
+  }
+
   async findByProNumber(proNumber: string): Promise<Shipment> {
     return this.shipmentModel
       .findOne({ proNumber })

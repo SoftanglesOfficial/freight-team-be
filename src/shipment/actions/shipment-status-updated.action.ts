@@ -150,41 +150,6 @@ export class ShipmentStatusUpdatedAction extends Action<RequestUser, Shipment> {
           `Thank you for trusting us with your shipment. If you have another load coming up, we're ready when you are.`,
         )
         .build();
-    } else if (newStatusNorm === 'invoice-ready') {
-      emailSubject = `Invoice Ready – ${this.data.proNumber} | Payment Options`;
-      emailHtml = this.htmlBuilder
-        .hello(customerName)
-        .line(`Your invoice for shipment <b>${this.data.proNumber}</b> is now ready.`)
-        .divider()
-        .heading(3, 'Invoice Details')
-        .list([
-          `<b>Shipment Reference:</b> ${this.data.proNumber}`,
-          `<b>Carrier:</b> ${this.data.carrierName || 'N/A'}`,
-        ])
-        .divider()
-        .heading(3, 'View & Download Invoice')
-        .line(
-          `👉 <a href="https://freightteamlogistics.com/auth/login" style="color:#FF6B35;font-weight:500;text-decoration:none;">View Invoice in Your Account</a>`,
-        )
-        .divider()
-        .heading(3, 'Payment Options')
-        .line('We accept the following:')
-        .list([
-          'ACH / Bank Transfer',
-          'Zelle',
-          'Wire Transfer',
-          'Check (mailed to address on invoice)',
-          'Credit Card (by phone)',
-        ])
-        .line(
-          `For payment instructions or to pay by phone, reply to this email. For fastest processing, ACH or Zelle is preferred.`,
-        )
-        .divider()
-        .heading(3, 'Questions or Disputes')
-        .line(
-          `If you have any questions regarding your invoice, reply to this email or contact us at <a href="mailto:sales@ftlwarehouse.com" style="color:#FF6B35;">sales@ftlwarehouse.com</a>.`,
-        )
-        .build();
     } else {
       // Default template for other statuses
       emailHtml = this.htmlBuilder

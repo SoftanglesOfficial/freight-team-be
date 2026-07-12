@@ -47,10 +47,10 @@ export class CreateShipmentDto {
   @IsNotEmpty()
   ftlWareHouseId: string;
 
-  @ApiProperty()
+  @ApiProperty({ required: false })
   @IsString()
-  @IsNotEmpty()
-  proNumber: string;
+  @IsOptional()
+  proNumber?: string;
 
   @ApiProperty()
   @IsString()

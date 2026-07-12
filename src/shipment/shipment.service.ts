@@ -31,21 +31,23 @@ export class ShipmentService {
   ) {}
 
   private async generateProNumber(): Promise<string> {
+    const prefix = 'RT';
     const lastShipment = await this.shipmentModel
-      .find({ proNumber: { $exists: true } })
+      .find({ proNumber: { $exists: true, $regex: `^${prefix}-` } })
       .sort({ createdAt: -1 })
       .limit(1)
       .exec();
 
     let number = 0;
     if (lastShipment.length > 0 && lastShipment[0].proNumber) {
-      const lastNumber = parseInt(lastShipment[0].proNumber.split('-')[1]);
-      if (!isNaN(lastNumber)) {
-        number = lastNumber;
+      const parts = lastShipment[0].proNumber.split('-');
+      const parsed = parseInt(parts[parts.length - 1], 10);
+      if (!isNaN(parsed)) {
+        number = parsed;
       }
     }
     number++;
-    return `RT-${number.toString().padStart(7, '0')}`;
+    return `${prefix}-${number.toString().padStart(7, '0')}`;
   }
 
   private parseName(fullName: string) {

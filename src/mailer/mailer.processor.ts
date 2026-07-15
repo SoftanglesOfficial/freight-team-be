@@ -42,6 +42,9 @@ export class MailerProcessor extends WorkerHost {
         return;
       }
 
+      const idempotencyKey =
+        job.data.idempotencyKey || (job.id != null ? String(job.id) : undefined);
+
       const { error } = await this.resend.emails.send({
         from: this.fromAddress,
         to,
@@ -58,16 +61,25 @@ export class MailerProcessor extends WorkerHost {
               : Buffer.from(attachment.content),
           contentType: attachment.contentType,
         })),
-      });
+        // Same Bull job retry → same Resend key → no duplicate customer email
+        ...(idempotencyKey ? { headers: { 'Idempotency-Key': idempotencyKey } } : {}),
+      } as any);
 
       if (error) {
         this.logger.error(`Email job ${job.id} failed:`, error);
-        return;
+        // Throw so Bull can retry transport failures; Resend idempotency
+        // prevents the customer from receiving duplicates on retry.
+        throw new Error(
+          typeof error === 'object' && error && 'message' in error
+            ? String((error as { message: string }).message)
+            : 'Email send failed',
+        );
       }
 
       this.logger.log(`Email job ${job.id} completed successfully`);
     } catch (error) {
       this.logger.error(`Email job ${job.id} failed:`, error);
+      throw error;
     }
   }
 

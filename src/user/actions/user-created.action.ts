@@ -69,6 +69,7 @@ export class UserCreatedAction extends Action<User | null, User> {
           to: this.data.email,
           subject: 'Welcome to Freight Team Logistics – Your Account Details',
           html: emailHtml,
+          idempotencyKey: `user-created-${this.data._id.toString()}`,
         },
       ],
 

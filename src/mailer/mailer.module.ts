@@ -13,7 +13,9 @@ import { BullModule } from '@nestjs/bullmq';
       defaultJobOptions: {
         removeOnComplete: true,
         removeOnFail: false,
-        attempts: 3,
+        // Keep a single retry for true transport failures, but Resend
+        // idempotency keys prevent duplicate customer emails on retry.
+        attempts: 2,
         backoff: {
           type: 'exponential',
           delay: 2000,

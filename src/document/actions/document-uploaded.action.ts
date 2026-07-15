@@ -177,6 +177,7 @@ export class DocumentUploadedAction extends Action<RequestUser, Document> {
               subject: emailSubject,
               html: emailHtml,
               attachments: attachments.length > 0 ? attachments : undefined,
+              idempotencyKey: `doc-upload-${this.data._id.toString()}`,
             },
           ]
         : [],

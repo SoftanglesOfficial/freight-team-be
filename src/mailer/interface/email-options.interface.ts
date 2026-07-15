@@ -13,4 +13,6 @@ export interface EmailOptions {
     contentType?: string;
   }>;
   delay?: number;
+  /** Prevents duplicate sends when Bull retries or the same event fires twice */
+  idempotencyKey?: string;
 }

@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { FilterQuery, Model, Types } from 'mongoose';
 import { Document, DocumentCategory } from './entities/document.entity';
@@ -21,6 +21,8 @@ function toObjectId(id?: string | null): Types.ObjectId | undefined {
 
 @Injectable()
 export class DocumentService {
+  private readonly logger = new Logger(DocumentService.name);
+
   constructor(
     @InjectModel(Document.name) private documentModel: Model<Document>,
     @InjectModel(Shipment.name) private shipmentModel: Model<any>,
@@ -407,9 +409,13 @@ ${text}`,
   async emitUploadEmailsForDocuments(
     documentIds: (string | Types.ObjectId)[],
   ): Promise<void> {
-    const ids = documentIds
-      .filter((id) => id && Types.ObjectId.isValid(id.toString()))
-      .map((id) => new Types.ObjectId(id.toString()));
+    const ids = [
+      ...new Set(
+        documentIds
+          .filter((id) => id && Types.ObjectId.isValid(id.toString()))
+          .map((id) => id.toString()),
+      ),
+    ].map((id) => new Types.ObjectId(id));
 
     if (ids.length === 0) return;
 
@@ -420,24 +426,32 @@ ${text}`,
       actor = await this.requestContext.getSystemUser();
     }
 
+    // Invoice emails are disabled in the product — only BOL notifies the customer.
+    // If multiple BOL docs were linked (re-uploads), email only the latest one.
     const documents = await this.documentModel
       .find({
         _id: { $in: ids },
-        category: { $in: [DocumentCategory.BOL, DocumentCategory.INVOICE] },
+        category: DocumentCategory.BOL,
       })
       .populate('shipment_id')
       .populate('customer')
+      .sort({ createdAt: -1 })
       .exec();
 
-    for (const document of documents) {
-      try {
-        await this.eventEmitter.emitAsync(
-          'action',
-          new DocumentUploadedAction(actor, document),
-        );
-      } catch (error) {
-        console.error('Failed to emit DocumentUploadedAction:', error.message);
-      }
+    if (documents.length === 0) return;
+
+    const document = documents[0];
+    this.logger.log(
+      `Emitting BOL email for document ${document._id} (skipped ${Math.max(0, documents.length - 1)} extra BOL docs)`,
+    );
+
+    try {
+      await this.eventEmitter.emitAsync(
+        'action',
+        new DocumentUploadedAction(actor, document),
+      );
+    } catch (error) {
+      console.error('Failed to emit DocumentUploadedAction:', error.message);
     }
   }
 

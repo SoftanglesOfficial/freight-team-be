@@ -218,16 +218,14 @@ export class UserService {
     return [records, count];
   }
 
-  async makeUserPassword(id: string, dto: Pick<User, 'password'>): Promise<User> {
+  async makeUserPassword(idOrEmail: string, dto: Pick<User, 'password'>): Promise<User> {
     const hashedPassword = this.hashPassword(dto.password);
+    // Callers pass either user _id (admin make-password) or email (reset / update-password)
+    const filter = Types.ObjectId.isValid(idOrEmail)
+      ? { _id: new Types.ObjectId(idOrEmail) }
+      : { email: idOrEmail };
     return await this.userModel
-      .findByIdAndUpdate(
-        { _id: new Types.ObjectId(id) },
-        { password: hashedPassword },
-        {
-          new: true,
-        },
-      )
+      .findOneAndUpdate(filter, { password: hashedPassword }, { new: true })
       .orFail(new NotFoundException('User not found'));
   }
 

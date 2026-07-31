@@ -17,6 +17,7 @@ import { UserService } from 'src/user/user.service';
 import { RequestContextService } from 'src/request-context/request-context.service';
 import { ShipmentQueryDto } from './dto/shipment-query.dto';
 import { DocumentService } from 'src/document/document.service';
+import { resolveShipmentCustomerContact } from 'src/common/utils/resolve-customer-contact.util';
 
 @Injectable()
 export class ShipmentService {
@@ -113,13 +114,20 @@ export class ShipmentService {
     });
 
     // Emit shipment created event
+    const adminIds = await this.userService.findAllAdminIds();
     try {
       const user = this.requestContext.getUser();
-      await this.eventEmitter.emitAsync('action', new ShipmentCreatedAction(user, shipment));
+      await this.eventEmitter.emitAsync(
+        'action',
+        new ShipmentCreatedAction(user, shipment, { adminIds }),
+      );
     } catch (error) {
       // If no user context (system operation), use system user
       const systemUser = await this.requestContext.getSystemUser();
-      await this.eventEmitter.emitAsync('action', new ShipmentCreatedAction(systemUser, shipment));
+      await this.eventEmitter.emitAsync(
+        'action',
+        new ShipmentCreatedAction(systemUser, shipment, { adminIds }),
+      );
     }
 
     // Link documents to this shipment and customer
@@ -338,17 +346,24 @@ export class ShipmentService {
 
     // Emit status updated event if status changed
     if (updateShipmentDto.status !== undefined && updateShipmentDto.status !== oldStatus) {
+      const notifChanges = await this.buildShipmentNotifChanges(updatedShipment);
       try {
         const user = this.requestContext.getUser();
         await this.eventEmitter.emitAsync(
           'action',
-          new ShipmentStatusUpdatedAction(user, updatedShipment, { oldStatus }),
+          new ShipmentStatusUpdatedAction(user, updatedShipment, {
+            oldStatus,
+            ...notifChanges,
+          }),
         );
       } catch (error) {
         const systemUser = await this.requestContext.getSystemUser();
         await this.eventEmitter.emitAsync(
           'action',
-          new ShipmentStatusUpdatedAction(systemUser, updatedShipment, { oldStatus }),
+          new ShipmentStatusUpdatedAction(systemUser, updatedShipment, {
+            oldStatus,
+            ...notifChanges,
+          }),
         );
       }
     }
@@ -538,5 +553,29 @@ export class ShipmentService {
     );
 
     return { message: `Status email for "${status}" sent to customer.` };
+  }
+
+  private async buildShipmentNotifChanges(shipment: Shipment): Promise<{
+    adminIds: string[];
+    customerUserId?: string;
+  }> {
+    const adminIds = await this.userService.findAllAdminIds();
+    const linked = shipment.customer_id as any;
+    let customerUserId: string | undefined;
+
+    if (linked) {
+      customerUserId =
+        typeof linked === 'object' && linked._id
+          ? String(linked._id)
+          : String(linked);
+    } else {
+      const { email } = resolveShipmentCustomerContact(shipment as any, null);
+      if (email) {
+        const user = await this.userService.findByEmailOrDefault(email);
+        customerUserId = user?._id?.toString();
+      }
+    }
+
+    return { adminIds, customerUserId };
   }
 }

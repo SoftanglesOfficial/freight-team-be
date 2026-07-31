@@ -5,16 +5,28 @@ import { Types } from 'mongoose';
 import { QUOTE_REQUEST_EVENTS } from '../quote-request.events';
 
 export class QuoteRequestCreatedAction extends Action<{}, QuoteRequest> {
-  constructor(subject: {}, data: QuoteRequest) {
-    super(subject, data);
+  constructor(subject: {}, data: QuoteRequest, changes?: Record<string, any>) {
+    super(subject, data, changes);
   }
 
   build(): IAction {
     const freightSummary = `${this.data.pallets.length} Pallet(s), ${this.data.pallets.reduce((acc, p) => acc + p.weight, 0)} lbs total`;
     const dimensions = this.data.pallets.map((p) => `${p.length}x${p.width}x${p.height}`).join(', ');
+    const adminIds: string[] = this.changes?.adminIds || [];
 
     return {
-      notifications: [],
+      notifications: adminIds.map((adminId) => ({
+        user: new Types.ObjectId(adminId),
+        action: ActionType.CREATE,
+        entity: {
+          type: QuoteRequest.name,
+          _id: this.data._id,
+          title: `Quote ${this.data.tracking_id}`,
+        },
+        message: `New quote request from ${this.data.full_name}`,
+        url: '/admin/quotes',
+        seen: false,
+      })),
       emails: [
         {
           adminCc: true,

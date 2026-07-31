@@ -41,7 +41,9 @@ export enum ActionType {
 
 export interface IAction {
   activity?: Pick<Activity, 'action' | 'entity' | 'change' | 'message' | 'user'>;
-  notifications?: Pick<Notification, 'message' | 'user' | 'action' | 'entity' | 'url'>[];
+  notifications?: (Pick<Notification, 'message' | 'user' | 'action' | 'entity' | 'url'> & {
+    seen?: boolean;
+  })[];
   socketEvents?: ISocketEvent[];
   emails?: EmailOptions[];
 }

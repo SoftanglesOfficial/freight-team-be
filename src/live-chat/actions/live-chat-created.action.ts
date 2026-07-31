@@ -19,6 +19,8 @@ export class LiveChatCreatedAction extends Action<{}, { liveChat: LiveChat; admi
             type: 'LiveChat',
           },
           message: `New chat from ${this.data.liveChat.user_name}`,
+          url: '/admin/livechat',
+          seen: false,
         };
       }),
       emails: [

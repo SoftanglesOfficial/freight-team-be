@@ -35,7 +35,7 @@ export class Notification extends Entity {
   url?: string;
 
   @ApiProperty()
-  @Prop({ type: String })
+  @Prop({ type: Boolean, default: false })
   seen: boolean;
 }
 

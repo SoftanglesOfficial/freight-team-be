@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { LiveChat } from 'src/live-chat/entities/live-chat.entity';
-import { Action, IAction } from 'src/common/class/action.class';
+import { Action, ActionType, IAction } from 'src/common/class/action.class';
 import { HtmlBuilder } from 'src/common/class/html-builder.class';
+import { Types } from 'mongoose';
 import { LIVE_CHAT_EVENTS } from '../live-chat.events';
 import { LiveChatMessage } from '../entities/live-chat-message.entity';
 
@@ -21,7 +22,20 @@ export class LiveChatMessageAction extends Action<
     const isFromCustomer = this.data.liveChatMsg.sender_id === this.data.liveChat.anon_id;
 
     return {
-      notifications: [],
+      notifications: isFromCustomer
+        ? this.data.adminIds.map((adminId) => ({
+            user: new Types.ObjectId(adminId),
+            action: ActionType.CREATE,
+            entity: {
+              _id: this.data.liveChat._id,
+              title: this.data.liveChat.subject || 'Live Chat',
+              type: 'LiveChat',
+            },
+            message: `New message from ${senderName}`,
+            url: '/admin/livechat',
+            seen: false,
+          }))
+        : [],
       socketEvents: [
         {
           event: LIVE_CHAT_EVENTS.LIVE_CHAT_MESSAGE,
@@ -45,7 +59,7 @@ export class LiveChatMessageAction extends Action<
                 )
                 .divider()
                 .line(
-                  `👉 <a href="https://freightteamlogistics.com/admin/live-chat" style="color:#FF6B35;font-weight:500;text-decoration:none;">Reply in Admin Panel</a>`,
+                  `👉 <a href="https://freightteamlogistics.com/admin/livechat" style="color:#FF6B35;font-weight:500;text-decoration:none;">Reply in Admin Panel</a>`,
                 )
                 .build(),
             },

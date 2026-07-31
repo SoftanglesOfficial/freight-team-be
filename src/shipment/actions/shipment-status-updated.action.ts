@@ -185,7 +185,7 @@ export class ShipmentStatusUpdatedAction extends Action<RequestUser, Shipment> {
         },
         message: `${this.actor.first_name} updated shipment ${this.data.proNumber} status from ${oldStatus} to ${newStatus}`,
       },
-      notifications: [],
+      notifications: this.buildNotifications(oldStatus, newStatus),
       emails: customerEmail && emailHtml
         ? [
             {
@@ -205,5 +205,38 @@ export class ShipmentStatusUpdatedAction extends Action<RequestUser, Shipment> {
         },
       ],
     };
+  }
+
+  private buildNotifications(oldStatus: string, newStatus: string) {
+    const adminIds: string[] = this.changes?.adminIds || [];
+    const customerUserId: string | undefined = this.changes?.customerUserId;
+    const message = `Shipment ${this.data.proNumber} status: ${oldStatus} → ${newStatus}`;
+    const entity = {
+      type: Shipment.name,
+      _id: this.data._id,
+      title: `Shipment ${this.data.proNumber}`,
+    };
+
+    const notifications = adminIds.map((adminId) => ({
+      user: new Types.ObjectId(adminId),
+      action: ActionType.UPDATE,
+      entity,
+      message,
+      url: `/admin/shipments/${this.data._id}`,
+      seen: false,
+    }));
+
+    if (customerUserId) {
+      notifications.push({
+        user: new Types.ObjectId(customerUserId),
+        action: ActionType.UPDATE,
+        entity,
+        message,
+        url: `/customer/freights/${this.data._id}`,
+        seen: false,
+      });
+    }
+
+    return notifications;
   }
 }

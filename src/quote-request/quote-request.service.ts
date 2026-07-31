@@ -44,9 +44,10 @@ export class QuoteRequestService {
     });
 
     const quote = await this.findOne(id);
+    const notifChanges = await this.buildQuoteNotifChanges(quote);
     await this.eventEmitter.emitAsync(
       'action',
-      new QuoteRequestUpdatedAction(this.requestContext.getUser(), quote),
+      new QuoteRequestUpdatedAction(this.requestContext.getUser(), quote, notifChanges),
     );
 
     return { message: 'Quote email sent successfully' };
@@ -58,7 +59,11 @@ export class QuoteRequestService {
       tracking_id: await this.sequenceService.getCode(this.quoteModel, 'QTR'),
       convertedToShipment: false, // New quotes are never converted yet
     });
-    await this.eventEmitter.emitAsync('action', new QuoteRequestCreatedAction({}, quote));
+    const adminIds = await this.userService.findAllAdminIds();
+    await this.eventEmitter.emitAsync(
+      'action',
+      new QuoteRequestCreatedAction({}, quote, { adminIds }),
+    );
 
     // Return with computed convertedToShipment (should be false for new quotes)
     const quoteObj = quote.toObject();
@@ -150,9 +155,10 @@ export class QuoteRequestService {
         new QuoteFollowUpAction(this.requestContext.getUser(), quote),
       );
     } else {
+      const notifChanges = await this.buildQuoteNotifChanges(quote);
       await this.eventEmitter.emitAsync(
         'action',
-        new QuoteRequestUpdatedAction(this.requestContext.getUser(), quote),
+        new QuoteRequestUpdatedAction(this.requestContext.getUser(), quote, notifChanges),
       );
     }
 
@@ -244,12 +250,11 @@ export class QuoteRequestService {
       actor = this.requestContext.getUser();
     } catch {}
 
+    const quoteData = quote.toObject ? quote.toObject() : quote;
+    const notifChanges = await this.buildQuoteNotifChanges(quoteData);
     await this.eventEmitter.emitAsync(
       'action',
-      new QuoteAcceptedAction(
-        actor,
-        quote.toObject ? quote.toObject() : quote,
-      ),
+      new QuoteAcceptedAction(actor, quoteData, notifChanges),
     );
 
     return shipment;
@@ -264,5 +269,26 @@ export class QuoteRequestService {
       new QuoteRequestDeletedAction(this.requestContext.getUser(), quote),
     );
     return quote;
+  }
+
+  private async buildQuoteNotifChanges(quote: QuoteRequest | Record<string, any>): Promise<{
+    adminIds: string[];
+    customerUserId?: string;
+  }> {
+    const adminIds = await this.userService.findAllAdminIds();
+    let customerUserId: string | undefined;
+    const linked = quote.customer_id as any;
+
+    if (linked) {
+      customerUserId =
+        typeof linked === 'object' && linked._id
+          ? String(linked._id)
+          : String(linked);
+    } else if (quote.email) {
+      const user = await this.userService.findByEmailOrDefault(quote.email);
+      customerUserId = user?._id?.toString();
+    }
+
+    return { adminIds, customerUserId };
   }
 }

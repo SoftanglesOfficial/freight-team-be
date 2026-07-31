@@ -139,12 +139,14 @@ export class SocketGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @OnEvent('emit_notifications')
   private emitNotifications([notifications, count]: [Notification[], number]) {
     notifications.forEach((notification) => {
-      const socket = this.map.get(notification.user.toString());
+      const userRef = notification.user as any;
+      const userId = userRef?._id?.toString?.() || userRef?.toString?.();
+      const socket = userId ? this.map.get(userId) : undefined;
       if (socket) {
         socket.emit(GATEWAY_ACTIONS.NEW_NOTIFICATION, notification);
         socket.emit(GATEWAY_ACTIONS.NOTIFICATION_COUNT_UPDATE, count);
         this.logger.log(
-          `Notification ${notification._id.toString()} dispatched for User ${notification.user.toString()}`,
+          `Notification ${notification._id.toString()} dispatched for User ${userId}`,
         );
       }
     });

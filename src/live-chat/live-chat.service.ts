@@ -5,12 +5,12 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { LiveChat, UnreadStats } from './entities/live-chat.entity';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { ISocketEvent } from 'src/common/interfaces/socket-event.interface';
 import { UserService } from 'src/user/user.service';
 import { LiveChatMessage } from './entities/live-chat-message.entity';
 import { ACTION_EVENT } from 'src/common/class/action.class';
 import { LiveChatMessageAction } from './actions/live-chat-message.action';
 import { LiveChatUpdatedAction } from './actions/live-chat-updated.action';
+import { LiveChatCreatedAction } from './actions/live-chat-created.action';
 
 @Injectable()
 export class LiveChatService {
@@ -37,12 +37,10 @@ export class LiveChatService {
     const chat = await this.liveChatModel.create(createLiveChatDto);
 
     const adminIds = await this.userService.findAllAdminIds();
-    const event: ISocketEvent = {
-      event: 'live_chat_created',
-      data: chat,
-      recipients: [chat.anon_id, ...adminIds],
-    };
-    this.eventEmitter.emit('emit_socket_event', event);
+    await this.eventEmitter.emitAsync(
+      ACTION_EVENT,
+      new LiveChatCreatedAction({}, { liveChat: chat, adminIds }),
+    );
     return chat;
   }
 

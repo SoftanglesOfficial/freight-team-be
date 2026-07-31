@@ -14,7 +14,11 @@ export class NotificationService {
   ) {}
 
   async create(createNotificationDto: CreateNotificationDto[]): Promise<[Notification[], number]> {
-    const notifications = await this.notificationModel.insertMany(createNotificationDto);
+    const withSeen = createNotificationDto.map((n) => ({
+      ...n,
+      seen: n.seen ?? false,
+    }));
+    const notifications = await this.notificationModel.insertMany(withSeen);
     const filter = {
       _id: { $in: notifications.map((notification) => notification._id) },
     };
@@ -45,7 +49,7 @@ export class NotificationService {
     const { seen } = query;
     const filter: FilterQuery<Notification> = {
       ...(user_id ? { user: new Types.ObjectId(user_id) } : {}),
-      ...(seen ? { seen } : {}),
+      ...(typeof seen === 'boolean' ? { seen } : {}),
     };
 
     return await Promise.all([

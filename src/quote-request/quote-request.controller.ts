@@ -7,20 +7,14 @@ import { QuoteRequestQueryDto } from './dto/quote-request-query.dto';
 import { PaginatedQuoteRequestsDto } from './dto/paginated-quote-requests.dto';
 import { QuoteRequest } from './entities/quote-request.entity';
 import { Public } from 'src/common/decorators/public.decorator';
-import { EventEmitter2 } from '@nestjs/event-emitter';
-import { QuoteRequestCreatedAction } from './actions/quote-request-created.action';
 import { Roles, Role } from 'src/roles/roles.decorator';
 import { Get, Post } from 'src/common/decorators/http.decorator';
 import { BaseController } from 'src/common/base.controller';
-import { QuoteRequestUpdatedAction } from './actions/quote-request-updated.action';
 import { Shipment } from 'src/shipment/entities/shipment.entity';
 
 @Controller('quote-request')
 export class QuoteRequestController extends BaseController {
-  constructor(
-    private readonly quoteRequestService: QuoteRequestService,
-    private readonly eventEmitter: EventEmitter2,
-  ) {
+  constructor(private readonly quoteRequestService: QuoteRequestService) {
     super();
   }
 
@@ -37,13 +31,8 @@ export class QuoteRequestController extends BaseController {
   @Post('/', { response: QuoteRequest, status: HttpStatus.CREATED })
   async create(
     @Body() createQuoteRequestDto: CreateQuoteRequestDto,
-    @Req() req: Request,
   ): Promise<QuoteRequest> {
-    const quote = await this.quoteRequestService.create(createQuoteRequestDto);
-    // user might be undefined if public
-    const user = req.user;
-    await this.eventEmitter.emitAsync('action', new QuoteRequestCreatedAction(user, quote));
-    return quote;
+    return this.quoteRequestService.create(createQuoteRequestDto);
   }
 
   @Roles(Role.SUPER_ADMIN, Role.STANDARD_USER)

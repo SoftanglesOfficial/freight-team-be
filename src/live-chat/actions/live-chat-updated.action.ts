@@ -21,6 +21,8 @@ export class LiveChatUpdatedAction extends Action<
             type: 'LiveChat',
           },
           message: `Chat updated: ${this.data.liveChat.subject}`,
+          url: '/admin/livechat',
+          seen: false,
         };
       }),
       socketEvents: [

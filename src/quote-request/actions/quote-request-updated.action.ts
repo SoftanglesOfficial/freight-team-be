@@ -5,23 +5,51 @@ import { Types } from 'mongoose';
 import { QUOTE_REQUEST_EVENTS } from '../quote-request.events';
 
 export class QuoteRequestUpdatedAction extends Action<RequestUser, QuoteRequest> {
-  constructor(subject: RequestUser, data: QuoteRequest) {
-    super(subject, data);
+  constructor(subject: RequestUser, data: QuoteRequest, changes?: Record<string, any>) {
+    super(subject, data, changes);
   }
 
   build(): IAction {
+    const adminIds: string[] = this.changes?.adminIds || [];
+    const customerUserId: string | undefined = this.changes?.customerUserId;
+    const entity = {
+      type: QuoteRequest.name,
+      _id: this.data._id,
+      title: `Quote for ${this.data.company_name || this.data.full_name}`,
+    };
+    const message =
+      this.data.status === 'Quoted'
+        ? `Quote ${this.data.tracking_id} is ready`
+        : `Quote ${this.data.tracking_id} updated (${this.data.status})`;
+
+    const notifications = adminIds.map((adminId) => ({
+      user: new Types.ObjectId(adminId),
+      action: ActionType.UPDATE,
+      entity,
+      message,
+      url: '/admin/quotes',
+      seen: false,
+    }));
+
+    if (customerUserId) {
+      notifications.push({
+        user: new Types.ObjectId(customerUserId),
+        action: ActionType.UPDATE,
+        entity,
+        message,
+        url: '/customer/quotes',
+        seen: false,
+      });
+    }
+
     return {
       activity: {
         user: new Types.ObjectId(this.actor.sub),
         action: ActionType.UPDATE,
-        entity: {
-          type: QuoteRequest.name,
-          _id: this.data._id,
-          title: `Quote for ${this.data.company_name || this.data.full_name}`,
-        },
+        entity,
         message: `${this.actor.first_name} updated a quote request`,
       },
-      notifications: [],
+      notifications,
       emails: [
         {
           adminCc: false,

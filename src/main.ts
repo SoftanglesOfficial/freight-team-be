@@ -4,10 +4,13 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { ValidationExceptionFilter } from './common/filters/validation.filter';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 import { DefaultValidationPipe } from './common/pipes/default-validation.pipe';
+import { json, urlencoded } from 'express';
 import * as fs from 'fs';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  app.use(json({ limit: '10mb' }));
+  app.use(urlencoded({ limit: '10mb', extended: true }));
   app.enableCors();
   app.useGlobalPipes(new DefaultValidationPipe());
   app.useGlobalFilters(new GlobalExceptionFilter(), new ValidationExceptionFilter());

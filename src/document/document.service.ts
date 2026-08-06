@@ -367,7 +367,6 @@ export class DocumentService {
   "pallet_width": "",
   "pallet_height": "",
   "commodity": "",
-  "pickup_date": "",
   "destination_accessorials": "",
   "stackable": "",
   "special_instructions": ""

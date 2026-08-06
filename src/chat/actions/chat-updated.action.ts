@@ -33,6 +33,7 @@ export class ChatUpdatedAction extends Action<RequestUser, Chat> {
           _id: this.data._id,
           title: this.data.name,
         },
+        url: '/admin/messages',
       })),
       emails: [],
       socketEvents: [

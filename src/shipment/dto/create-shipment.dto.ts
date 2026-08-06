@@ -52,6 +52,11 @@ export class CreateShipmentDto {
   @IsOptional()
   proNumber?: string;
 
+  @ApiProperty({ required: false, description: 'Customer PO number' })
+  @IsString()
+  @IsOptional()
+  poNumber?: string;
+
   @ApiProperty()
   @IsString()
   @IsNotEmpty()
@@ -66,6 +71,15 @@ export class CreateShipmentDto {
   @IsDateString()
   @IsOptional()
   pickupDate?: string;
+
+  @ApiProperty({
+    enum: ['pending', 'in-transit', 'delivered'],
+    description: 'Shipment status',
+    required: false,
+  })
+  @IsOptional()
+  @IsIn(['pending', 'in-transit', 'delivered'])
+  status?: 'pending' | 'in-transit' | 'delivered';
 
   @ApiProperty()
   @IsDateString()

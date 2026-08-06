@@ -11,6 +11,16 @@ export class ShipmentQueryDto extends PaginationQuery {
   @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
+  poNumber?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  ftlWareHouseId?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
   carrierName?: string;
 
   @ApiProperty({ required: false })

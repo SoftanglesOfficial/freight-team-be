@@ -213,6 +213,12 @@ export class Shipment extends Entity {
   @Prop({ type: String, required: true, unique: true, index: true })
   proNumber: string;
 
+  @ApiProperty({ required: false, description: 'Customer PO number' })
+  @IsOptional()
+  @IsString()
+  @Prop({ type: String, required: false, index: true })
+  poNumber?: string;
+
   @ApiProperty()
   @IsNotEmpty()
   @Prop({ type: String, required: true })

@@ -20,6 +20,7 @@ import { ShipmentModule } from './shipment/shipment.module';
 import { DocumentModule } from './document/document.module';
 import { LiveChatModule } from './live-chat/live-chat.module';
 import { RequestContextModule } from './request-context/request-context.module';
+import { GoogleSheetsModule } from './google-sheets/google-sheets.module';
 
 @Module({
   imports: [
@@ -63,6 +64,7 @@ import { RequestContextModule } from './request-context/request-context.module';
     ShipmentModule,
     DocumentModule,
     LiveChatModule,
+    GoogleSheetsModule,
   ],
   controllers: [AppController],
 })

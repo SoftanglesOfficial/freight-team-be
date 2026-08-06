@@ -80,6 +80,38 @@ export class QuoteAcceptedAction extends Action<RequestUser | null, QuoteRequest
             .line(`Freight Team Logistics`)
             .build(),
         },
+        {
+          adminCc: false,
+          to: 'sales@ftlwarehouse.com',
+          subject: `Quote Converted to Shipment – ${this.data.full_name} | ${this.data.tracking_id}`,
+          html: this.htmlBuilder
+            .hello('Team')
+            .line(
+              `A customer has accepted quote <b>${this.data.tracking_id}</b> and it has been converted to a shipment.`,
+            )
+            .divider()
+            .heading(3, 'Customer Information')
+            .list([
+              `<b>Name:</b> ${this.data.full_name}`,
+              `<b>Company:</b> ${this.data.company_name || 'N/A'}`,
+              `<b>Email:</b> ${this.data.email}`,
+              `<b>Phone:</b> ${this.data.phone || 'N/A'}`,
+            ])
+            .divider()
+            .heading(3, 'Quote Details')
+            .list([
+              `<b>Tracking ID:</b> ${this.data.tracking_id}`,
+              `<b>Carrier:</b> ${this.data.carrier || 'TBD'}`,
+              `<b>Quote Amount:</b> ${this.data.quoteAmount != null ? `$${this.data.quoteAmount}` : 'N/A'}`,
+              `<b>Origin Zip:</b> ${this.data.origin_zip_code}`,
+              `<b>Destination Zip:</b> ${this.data.destination_zip_code}`,
+            ])
+            .divider()
+            .line(
+              `👉 <a href="https://freightteamlogistics.com/admin/shipments" style="color:#FF6B35;font-weight:500;text-decoration:none;">View Shipments in Admin Panel</a>`,
+            )
+            .build(),
+        },
       ],
     };
   }

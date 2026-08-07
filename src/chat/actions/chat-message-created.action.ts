@@ -38,6 +38,7 @@ export class ChatMessageCreatedAction extends Action<
           _id: message._id,
           title: message.content as string,
         },
+        url: '/admin/messages',
       })),
       emails: [],
       socketEvents: [

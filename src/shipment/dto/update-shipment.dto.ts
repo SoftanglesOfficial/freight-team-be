@@ -65,6 +65,11 @@ export class UpdateShipmentDto extends PartialType(
   @IsOptional()
   proNumber?: string;
 
+  @ApiProperty({ required: false, description: 'Customer PO number' })
+  @IsString()
+  @IsOptional()
+  poNumber?: string;
+
   @ApiProperty({ required: false })
   @IsString()
   @IsOptional()

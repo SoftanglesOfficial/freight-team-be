@@ -18,6 +18,7 @@ export class LiveChatDeletedAction extends Action<{}, { liveChat: LiveChat; admi
             type: 'LiveChat',
           },
           message: `Chat updated: ${this.data.liveChat.subject}`,
+          url: '/admin/livechat',
         };
       }),
       socketEvents: [

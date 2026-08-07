@@ -134,11 +134,16 @@ export class ShipmentService {
         ]
       : [];
 
+    const initialStatus =
+      createShipmentDto.status ||
+      (createShipmentDto.pickupDate ? 'in-transit' : 'pending');
+
     const shipment = await this.shipmentModel.create({
       ...restCreate,
       notes: initialNotes,
       proNumber,
       customer_id: customerId,
+      status: initialStatus,
       dateOfOrder: new Date(createShipmentDto.dateOfOrder),
       ...(createShipmentDto.pickupDate && {
         pickupDate: new Date(createShipmentDto.pickupDate),
@@ -233,6 +238,14 @@ export class ShipmentService {
 
     if (query.proNumber) {
       filter.proNumber = { $regex: query.proNumber, $options: 'i' };
+    }
+
+    if (query.poNumber) {
+      filter.poNumber = { $regex: query.poNumber, $options: 'i' };
+    }
+
+    if (query.ftlWareHouseId) {
+      filter.ftlWareHouseId = { $regex: query.ftlWareHouseId, $options: 'i' };
     }
 
     if (query.carrierName) {

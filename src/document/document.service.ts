@@ -88,6 +88,26 @@ export class DocumentService {
       const document = new this.documentModel(documentData);
       const savedDocument = await document.save();
 
+      // Record BOL upload on shipment history
+      if (
+        createDocumentDto.shipment_id &&
+        savedDocument.category === DocumentCategory.BOL
+      ) {
+        await this.shipmentModel.updateOne(
+          { _id: createDocumentDto.shipment_id },
+          {
+            $push: {
+              status_history: {
+                status: 'bol-uploaded',
+                note: `BOL document uploaded: ${savedDocument.name}`,
+                timestamp: new Date(),
+                internal: false,
+              },
+            },
+          },
+        );
+      }
+
       // Email when already linked to a shipment (edit flow). Create-shipment flow
       // uploads BOL first, then links on save — emails fire from shipment.service.
       if (createDocumentDto.shipment_id) {

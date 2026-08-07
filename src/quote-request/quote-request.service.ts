@@ -227,9 +227,26 @@ export class QuoteRequestService {
       dateOfOrder: new Date(),
       estimatedDeliveryDate: data.estimatedDeliveryDate || quote.delivery_date || new Date(),
       pickupDate: data.pickupDate,
-      notes: data.notes || quote.special_instructions,
+      notes: (data.notes || quote.special_instructions)
+        ? [
+            {
+              text: data.notes || quote.special_instructions,
+              internal: false,
+              createdAt: new Date(),
+              createdBy: quote.full_name || 'Customer',
+            },
+          ]
+        : [],
       timeSensitive: quote.is_time_sensitive ? 'yes' : 'no',
       status: 'pending',
+      status_history: [
+        {
+          status: 'created',
+          note: 'Shipment created from accepted quote',
+          timestamp: new Date(),
+          internal: false,
+        },
+      ],
       load_items: quote.pallets?.map((item) => ({
         weight: item.weight,
         length: item.length,

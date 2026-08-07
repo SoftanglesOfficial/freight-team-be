@@ -30,24 +30,42 @@ export class UserService {
   async seedAdminUsers(
     users: {
       first_name: string;
+      last_name?: string;
       email: string;
       password: string;
     }[],
   ): Promise<User[]> {
-    const existingAdminUsers = await this.userModel.find({
-      roles: { $in: [Role.SUPER_ADMIN] },
-    });
-    if (existingAdminUsers.length > 0) {
-      return existingAdminUsers;
-    }
-    const adminUsers = await this.userModel.insertMany(
-      users.map((user) => ({
-        ...user,
-        password: this.hashPassword(user.password),
+    const results: User[] = [];
+
+    for (const user of users) {
+      const password = this.hashPassword(user.password);
+      const existing = await this.userModel.findOne({ email: user.email }).exec();
+
+      if (existing) {
+        existing.first_name = user.first_name;
+        if (user.last_name !== undefined) existing.last_name = user.last_name;
+        existing.password = password;
+        existing.roles = [Role.SUPER_ADMIN];
+        existing.is_active = true;
+        existing.provider = existing.provider || 'local';
+        await existing.save();
+        results.push(existing);
+        continue;
+      }
+
+      const created = await this.userModel.create({
+        first_name: user.first_name,
+        last_name: user.last_name || '',
+        email: user.email,
+        password,
+        provider: 'local',
         roles: [Role.SUPER_ADMIN],
-      })),
-    );
-    return adminUsers;
+        is_active: true,
+      });
+      results.push(created);
+    }
+
+    return results;
   }
 
   public readonly model: Model<User>;

@@ -129,6 +129,12 @@ export class AuthController {
         email: 'sales@ftlwarehouse.com',
         password: 'Password@123',
       },
+      {
+        first_name: 'Azib',
+        last_name: 'Ali Ansari',
+        email: 'azibaliansari311@gmail.com',
+        password: 'Admin@1234',
+      },
     ]);
     return new Message('Admin user seeded successfully');
   }

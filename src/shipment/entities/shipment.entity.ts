@@ -135,6 +135,27 @@ export class LoadItem {
   description?: string;
 }
 
+@Schema({ _id: false })
+export class ShipmentNote {
+  @ApiProperty()
+  @Prop({ type: String, required: true })
+  text: string;
+
+  @ApiProperty({ default: false })
+  @Prop({ type: Boolean, default: false })
+  internal: boolean;
+
+  @ApiProperty()
+  @Prop({ type: Date, default: Date.now })
+  createdAt: Date;
+
+  @ApiProperty({ required: false })
+  @Prop({ type: String, required: false })
+  createdBy?: string;
+}
+
+export const ShipmentNoteSchema = SchemaFactory.createForClass(ShipmentNote);
+
 export class StatusHistoryEntry {
   @ApiProperty()
   @Prop({ type: String, required: true })
@@ -165,6 +186,10 @@ export class StatusHistoryEntry {
   @ApiProperty({ required: false })
   @Prop({ type: String, required: false })
   updatedBy?: string;
+
+  @ApiProperty({ required: false, default: false })
+  @Prop({ type: Boolean, default: false })
+  internal?: boolean;
 }
 
 @Schema({ timestamps: true })
@@ -203,10 +228,11 @@ export class Shipment extends Entity {
   @Prop({ type: String, required: false })
   quote_tracking_id?: string;
 
-  @ApiProperty()
-  @IsNotEmpty()
-  @Prop({ type: String, required: true })
-  ftlWareHouseId: string;
+  @ApiProperty({ required: false, description: 'FTL Number (primary customer-facing ID)' })
+  @IsOptional()
+  @IsString()
+  @Prop({ type: String, required: false, trim: true })
+  ftlWareHouseId?: string;
 
   @ApiProperty()
   @IsNotEmpty()
@@ -238,10 +264,10 @@ export class Shipment extends Entity {
   @Prop({ type: Date, required: false })
   deliveryDate?: Date;
 
-  @ApiProperty({ required: false })
+  @ApiProperty({ type: [ShipmentNote], required: false })
   @IsOptional()
-  @Prop({ type: String, required: false })
-  notes?: string;
+  @Prop({ type: [ShipmentNoteSchema], default: [] })
+  notes?: ShipmentNote[];
 
   @ApiProperty({ enum: ['yes', 'no'], description: 'Time sensitive shipment indicator' })
   @IsNotEmpty()

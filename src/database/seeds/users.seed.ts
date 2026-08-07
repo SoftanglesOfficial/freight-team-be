@@ -17,6 +17,15 @@ const SEED_USERS = [
     is_active: true,
   },
   {
+    first_name: 'Azib',
+    last_name: 'Ali Ansari',
+    email: 'azibaliansari311@gmail.com',
+    plainPassword: 'Admin@1234',
+    provider: 'local',
+    roles: [Role.SUPER_ADMIN],
+    is_active: true,
+  },
+  {
     first_name: 'Test',
     last_name: 'Customer',
     email: 'customer@ftlwarehouse.com',

@@ -1,18 +1,32 @@
-import { ApiProperty, PartialType } from '@nestjs/swagger';
+import { ApiProperty, PartialType, OmitType } from '@nestjs/swagger';
 import { CreateShipmentDto } from './create-shipment.dto';
 import {
   IsOptional,
-  IsEmail,
-  IsPhoneNumber,
   ValidateNested,
   IsString,
   IsDateString,
   IsIn,
+  IsBoolean,
+  IsNotEmpty,
 } from 'class-validator';
-import { Transform, Type } from 'class-transformer';
+import { Type } from 'class-transformer';
 import { Address, CustomerInfo } from '../entities/shipment.entity';
 
-export class UpdateShipmentDto extends PartialType(CreateShipmentDto) {
+export class NewShipmentNoteDto {
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  text: string;
+
+  @ApiProperty({ required: false, default: false })
+  @IsBoolean()
+  @IsOptional()
+  internal?: boolean;
+}
+
+export class UpdateShipmentDto extends PartialType(
+  OmitType(CreateShipmentDto, ['notes'] as const),
+) {
   @ApiProperty({ type: CustomerInfo, required: false })
   @IsOptional()
   @ValidateNested()
@@ -76,10 +90,11 @@ export class UpdateShipmentDto extends PartialType(CreateShipmentDto) {
   @IsOptional()
   deliveryDate?: string;
 
-  @ApiProperty({ required: false })
-  @IsString()
+  @ApiProperty({ type: NewShipmentNoteDto, required: false })
   @IsOptional()
-  notes?: string;
+  @ValidateNested()
+  @Type(() => NewShipmentNoteDto)
+  newNote?: NewShipmentNoteDto;
 
   @ApiProperty({
     enum: ['yes', 'no'],

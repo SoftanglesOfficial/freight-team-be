@@ -2,7 +2,7 @@ import { Inject, Injectable, NotFoundException, Scope } from '@nestjs/common';
 import { CreateShipmentDto } from './dto/create-shipment.dto';
 import { UpdateShipmentDto } from './dto/update-shipment.dto';
 import { InjectModel } from '@nestjs/mongoose';
-import { Shipment } from './entities/shipment.entity';
+import { Shipment, ShipmentNote } from './entities/shipment.entity';
 import { Document as DocumentEntity } from '../document/entities/document.entity';
 import { FilterQuery, Model, Types } from 'mongoose';
 import { TrackingResponseDto } from './dto/tracking-response.dto';
@@ -18,6 +18,7 @@ import { RequestContextService } from 'src/request-context/request-context.servi
 import { ShipmentQueryDto } from './dto/shipment-query.dto';
 import { DocumentService } from 'src/document/document.service';
 import { resolveShipmentCustomerContact } from 'src/common/utils/resolve-customer-contact.util';
+import { Role } from 'src/roles/roles.decorator';
 
 @Injectable()
 export class ShipmentService {
@@ -30,6 +31,31 @@ export class ShipmentService {
     private readonly userService: UserService,
     private readonly documentService: DocumentService,
   ) {}
+
+  private normalizeNotes(notes: unknown): ShipmentNote[] {
+    if (Array.isArray(notes)) {
+      return notes as ShipmentNote[];
+    }
+    if (typeof notes === 'string' && notes.trim()) {
+      return [
+        {
+          text: notes,
+          internal: false,
+          createdAt: new Date(),
+        },
+      ];
+    }
+    return [];
+  }
+
+  private applyNotesToShipment(shipment: Shipment, filterInternal = false): Shipment {
+    let notes = this.normalizeNotes((shipment as any).notes);
+    if (filterInternal) {
+      notes = notes.filter((n) => !n.internal);
+    }
+    (shipment as any).notes = notes;
+    return shipment;
+  }
 
   private async generateProNumber(): Promise<string> {
     const prefix = 'RT';
@@ -88,8 +114,29 @@ export class ShipmentService {
       }
     }
 
+    let createdBy = 'System';
+    try {
+      const actor = this.requestContext.getUser();
+      createdBy = `${actor.first_name} ${actor.last_name || ''}`.trim() || actor.email;
+    } catch {
+      // no request user
+    }
+
+    const { notes: legacyNotes, ...restCreate } = createShipmentDto;
+    const initialNotes: ShipmentNote[] = legacyNotes
+      ? [
+          {
+            text: legacyNotes,
+            internal: false,
+            createdAt: new Date(),
+            createdBy,
+          },
+        ]
+      : [];
+
     const shipment = await this.shipmentModel.create({
-      ...createShipmentDto,
+      ...restCreate,
+      notes: initialNotes,
       proNumber,
       customer_id: customerId,
       dateOfOrder: new Date(createShipmentDto.dateOfOrder),
@@ -105,10 +152,11 @@ export class ShipmentService {
       }),
       status_history: [
         {
-          status: 'pending',
+          status: 'created',
+          note: 'Shipment created',
           timestamp: new Date(),
           updatedBy: this.requestContext.getUser()?.email || 'System',
-          note: 'Shipment created',
+          internal: false,
         },
       ],
     });
@@ -143,6 +191,28 @@ export class ShipmentService {
         }
 
         await this.documentModel.updateMany({ _id: { $in: validDocIds } }, { $set: updateData });
+
+        // BOL docs uploaded before shipment existed — record history now
+        const bolDocs = await this.documentModel.find({
+          _id: { $in: validDocIds },
+          category: 'BOL',
+        });
+        for (const bol of bolDocs) {
+          await this.shipmentModel.updateOne(
+            { _id: shipment._id },
+            {
+              $push: {
+                status_history: {
+                  status: 'bol-uploaded',
+                  note: `BOL document uploaded: ${bol.name}`,
+                  timestamp: new Date(),
+                  internal: false,
+                },
+              },
+            },
+          );
+        }
+
         await this.documentService.emitUploadEmailsForDocuments(validDocIds);
       }
     }
@@ -244,22 +314,48 @@ export class ShipmentService {
 
     const shipments = await this.shipmentModel
       .find(filter)
-      .sort({ createdAt: -1 })
+      .sort({ ftlWareHouseId: -1, createdAt: -1 })
       .skip(query.skip)
       .limit(query.pageSize)
       .populate('quote')
       .exec();
 
     const count = await this.shipmentModel.countDocuments(filter).exec();
-    return [shipments, count];
+    const filterInternal = !isAdmin;
+    return [shipments.map((s) => this.applyNotesToShipment(s, filterInternal)), count];
   }
 
   async findOne(id: string): Promise<Shipment> {
-    return this.shipmentModel
+    const shipment = await this.shipmentModel
       .findById(id)
       .populate('quote')
       .populate('customer_id', 'first_name last_name email')
       .orFail(new NotFoundException('Shipment not found'));
+
+    const rawNotes = (shipment as any).notes;
+    const normalized = this.normalizeNotes(rawNotes);
+
+    // Migrate legacy string notes to array on read
+    if (typeof rawNotes === 'string') {
+      await this.shipmentModel.updateOne({ _id: shipment._id }, { $set: { notes: normalized } });
+    }
+
+    let filterInternal = false;
+    try {
+      const user = this.requestContext.getUser();
+      const isAdmin = user.roles?.some(
+        (role) =>
+          role.toLowerCase().includes('admin') ||
+          role.toLowerCase() === 'admin' ||
+          role.toLowerCase() === 'super admin' ||
+          role === Role.SUPER_ADMIN,
+      );
+      filterInternal = !isAdmin;
+    } catch {
+      filterInternal = true;
+    }
+
+    return this.applyNotesToShipment(shipment, filterInternal);
   }
 
   async isShipmentVisibleToUser(
@@ -297,7 +393,61 @@ export class ShipmentService {
     const oldShipment = await this.findOne(id);
     const oldStatus = oldShipment.status;
 
-    const updateData: any = { ...updateShipmentDto };
+    // Add structured note (internal or customer-visible)
+    if (updateShipmentDto.newNote?.text?.trim()) {
+      let createdBy = 'System';
+      try {
+        const actor = this.requestContext.getUser();
+        createdBy = `${actor.first_name} ${actor.last_name || ''}`.trim() || actor.email;
+      } catch {
+        // no request user
+      }
+      const noteEntry: ShipmentNote = {
+        text: updateShipmentDto.newNote.text.trim(),
+        internal: updateShipmentDto.newNote.internal ?? false,
+        createdAt: new Date(),
+        createdBy,
+      };
+      await this.shipmentModel.updateOne(
+        { _id: id },
+        {
+          $push: {
+            notes: noteEntry,
+            status_history: {
+              status: 'note-added',
+              note: noteEntry.internal
+                ? `Internal note added: ${noteEntry.text}`
+                : `Note added: ${noteEntry.text}`,
+              timestamp: new Date(),
+              updatedBy: createdBy,
+              internal: noteEntry.internal,
+            },
+          },
+        },
+      );
+      delete updateShipmentDto.newNote;
+    }
+
+    let autoHistoryNote: string | undefined;
+
+    // AUTO STATUS: Delivery Date entered → Delivered
+    if (updateShipmentDto.deliveryDate && !oldShipment.deliveryDate) {
+      updateShipmentDto.status = 'delivered';
+      autoHistoryNote = 'Shipment Delivered';
+    }
+    // AUTO STATUS: Pickup Date entered → In Transit
+    // Only set in-transit if not already delivered
+    else if (
+      updateShipmentDto.pickupDate &&
+      !oldShipment.pickupDate &&
+      updateShipmentDto.status !== 'delivered'
+    ) {
+      updateShipmentDto.status = 'in-transit';
+      autoHistoryNote = 'Pickup confirmed - In Transit';
+    }
+
+    const { newNote: _n, notes: _legacyNotes, ...restDto } = updateShipmentDto as any;
+    const updateData: any = { ...restDto };
 
     if (updateShipmentDto.dateOfOrder) {
       updateData.dateOfOrder = new Date(updateShipmentDto.dateOfOrder);
@@ -321,28 +471,43 @@ export class ShipmentService {
         : null;
     }
 
-    const updatedShipment = await this.shipmentModel
-      .findByIdAndUpdate(
-        id,
-        {
-          $set: updateData,
-          ...(updateShipmentDto.status &&
-            updateShipmentDto.status !== oldStatus && {
-              $push: {
-                status_history: {
-                  status: updateShipmentDto.status,
-                  timestamp: new Date(),
-                  updatedBy: this.requestContext.getUser()?.email || 'System',
-                  note: `Status updated from ${oldStatus} to ${updateShipmentDto.status}`,
-                },
-              },
-            }),
-        },
-        { new: true },
-      )
-      .populate('quote')
-      .populate('customer_id', 'first_name last_name email')
-      .orFail(new NotFoundException('Shipment not found'));
+    // Never overwrite notes array via $set of a string
+    delete updateData.notes;
+    delete updateData.newNote;
+
+    const hasFieldUpdates = Object.keys(updateData).length > 0;
+
+    const updatedShipment = hasFieldUpdates
+      ? await this.shipmentModel
+          .findByIdAndUpdate(
+            id,
+            {
+              $set: updateData,
+              ...(updateShipmentDto.status &&
+                updateShipmentDto.status !== oldStatus && {
+                  $push: {
+                    status_history: {
+                      status: updateShipmentDto.status,
+                      timestamp: new Date(),
+                      updatedBy: this.requestContext.getUser()?.email || 'System',
+                      note:
+                        autoHistoryNote ||
+                        `Status updated from ${oldStatus} to ${updateShipmentDto.status}`,
+                      internal: false,
+                    },
+                  },
+                }),
+            },
+            { new: true },
+          )
+          .populate('quote')
+          .populate('customer_id', 'first_name last_name email')
+          .orFail(new NotFoundException('Shipment not found'))
+      : await this.shipmentModel
+          .findById(id)
+          .populate('quote')
+          .populate('customer_id', 'first_name last_name email')
+          .orFail(new NotFoundException('Shipment not found'));
 
     // Emit status updated event if status changed
     if (updateShipmentDto.status !== undefined && updateShipmentDto.status !== oldStatus) {
@@ -384,7 +549,7 @@ export class ShipmentService {
       }
     }
 
-    return updatedShipment;
+    return this.applyNotesToShipment(updatedShipment, false);
   }
 
   async remove(id: string): Promise<Shipment> {

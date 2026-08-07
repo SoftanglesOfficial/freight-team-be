@@ -15,6 +15,7 @@ import { User, UserSchema } from '../../user/entities/user.entity';
           'mongodb://localhost:27017',
         ),
         dbName: configService.get<string>('MONGODB_DB_NAME', 'freight-team'),
+        serverSelectionTimeoutMS: 8000,
       }),
     }),
     MongooseModule.forFeature([{ name: User.name, schema: UserSchema }]),

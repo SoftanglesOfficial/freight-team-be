@@ -164,8 +164,8 @@ export class GoogleSheetsService implements OnModuleInit {
             );
           }
 
-          // Now safely push the new note
-          await this.shipmentModel.updateOne(
+          // Now safely push the new note (raw driver bypasses Mongoose schema validation)
+          await this.shipmentModel.collection.updateOne(
             { _id: existing._id },
             {
               $push: {
@@ -176,7 +176,7 @@ export class GoogleSheetsService implements OnModuleInit {
                   createdBy: 'Spreadsheet Sync',
                 },
               },
-            },
+            } as any,
           );
           notePushed = true;
           this.logger.log(`Note added for ${proNumber}: ${row.notes}`);

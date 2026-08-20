@@ -142,13 +142,29 @@ export class GoogleSheetsService implements OnModuleInit {
       // Notes → $push only when sheet note differs from the last note
       let notePushed = false;
       if (row.notes) {
-        const existingNotes = Array.isArray(existing.notes) ? existing.notes : [];
-        const lastNoteText =
-          existingNotes.length > 0
+        const rawNotes = (existing as any).notes;
+        const existingNotes = Array.isArray(rawNotes) ? rawNotes : [];
+        const lastNoteText = Array.isArray(rawNotes)
+          ? existingNotes.length > 0
             ? (existingNotes[existingNotes.length - 1] as any).text || ''
+            : ''
+          : typeof rawNotes === 'string'
+            ? rawNotes
             : '';
 
         if (row.notes.trim() !== String(lastNoteText).trim()) {
+          // Migrate notes from string to array if needed
+          if (typeof rawNotes === 'string' || !Array.isArray(rawNotes)) {
+            const migratedNote = rawNotes
+              ? [{ text: rawNotes, internal: false, createdAt: new Date(), createdBy: 'Migration' }]
+              : [];
+            await this.shipmentModel.updateOne(
+              { _id: existing._id },
+              { $set: { notes: migratedNote } },
+            );
+          }
+
+          // Now safely push the new note
           await this.shipmentModel.updateOne(
             { _id: existing._id },
             {

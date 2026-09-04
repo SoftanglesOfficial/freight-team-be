@@ -33,6 +33,16 @@ export class NotificationController extends BaseController {
     return notification;
   }
 
+  @Patch('/mark-all-seen', { response: Object, status: HttpStatus.OK })
+  async markAllSeen(@Req() req: Express.Request): Promise<{ modified: number }> {
+    return this.notificationService.markAllSeen(req.user.sub);
+  }
+
+  @Delete('/clear-all', { response: Object, status: HttpStatus.OK })
+  async clearAll(@Req() req: Express.Request): Promise<{ deleted: number }> {
+    return this.notificationService.clearAll(req.user.sub);
+  }
+
   @Patch('/:id', { response: Notification, status: HttpStatus.OK })
   async updateOne(
     @Param('id', ParseObjectIdPipe) id: string,

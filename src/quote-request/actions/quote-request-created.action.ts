@@ -11,7 +11,9 @@ export class QuoteRequestCreatedAction extends Action<{}, QuoteRequest> {
 
   build(): IAction {
     const freightSummary = `${this.data.pallets.length} Pallet(s), ${this.data.pallets.reduce((acc, p) => acc + p.weight, 0)} lbs total`;
-    const dimensions = this.data.pallets.map((p) => `${p.length}x${p.width}x${p.height}`).join(', ');
+    const dimensions = this.data.pallets
+      .map((p) => `${p.length}x${p.width}x${p.height}`)
+      .join(', ');
     const adminIds: string[] = this.changes?.adminIds || [];
 
     return {
@@ -45,15 +47,17 @@ export class QuoteRequestCreatedAction extends Action<{}, QuoteRequest> {
               `<b>Delivery:</b> ${this.data.destination_zip_code}`,
               `<b>Freight:</b> ${freightSummary} (${dimensions})`,
               `<b>Commodity:</b> ${this.data.special_instructions || 'General Freight'}`,
-              `<b>Special Requirements:</b> ${[
-                this.data.is_time_sensitive ? 'Time Sensitive' : '',
-                this.data.is_residential ? 'Residential' : '',
-              ]
-                .filter(Boolean)
-                .join(', ') || 'None'}`,
+              `<b>Special Requirements:</b> ${
+                [
+                  this.data.is_time_sensitive ? 'Time Sensitive' : '',
+                  this.data.is_residential ? 'Residential' : '',
+                ]
+                  .filter(Boolean)
+                  .join(', ') || 'None'
+              }`,
             ])
             .divider()
-            .heading(3, 'Your Tracking ID')
+            .heading(3, 'Your Quote Reference')
             .heading(2, this.data.tracking_id)
             .line(`You can track the status of your quote anytime here:`)
             .line(
@@ -130,9 +134,7 @@ export class QuoteRequestCreatedAction extends Action<{}, QuoteRequest> {
           subject: `New Quote Request – ${this.data.full_name} | ${this.data.tracking_id}`,
           html: this.htmlBuilder
             .hello('Team')
-            .line(
-              `A new quote request has been submitted. Here are the customer details:`,
-            )
+            .line(`A new quote request has been submitted. Here are the customer details:`)
             .divider()
             .heading(3, 'Customer Information')
             .list([
@@ -144,7 +146,7 @@ export class QuoteRequestCreatedAction extends Action<{}, QuoteRequest> {
             .divider()
             .heading(3, 'Shipment Details')
             .list([
-              `<b>Tracking ID:</b> ${this.data.tracking_id}`,
+              `<b>Quote Reference:</b> ${this.data.tracking_id}`,
               `<b>Origin Zip:</b> ${this.data.origin_zip_code}`,
               `<b>Destination Zip:</b> ${this.data.destination_zip_code}`,
               `<b>Pallets:</b> ${this.data.pallets.length} pallet(s), ${this.data.pallets.reduce((acc, p) => acc + p.weight, 0)} lbs total`,

@@ -57,24 +57,12 @@ export class ShipmentService {
     return shipment;
   }
 
-  private async generateProNumber(): Promise<string> {
-    const prefix = 'RT';
-    const lastShipment = await this.shipmentModel
-      .find({ proNumber: { $exists: true, $regex: `^${prefix}-` } })
-      .sort({ createdAt: -1 })
-      .limit(1)
-      .exec();
-
-    let number = 0;
-    if (lastShipment.length > 0 && lastShipment[0].proNumber) {
-      const parts = lastShipment[0].proNumber.split('-');
-      const parsed = parseInt(parts[parts.length - 1], 10);
-      if (!isNaN(parsed)) {
-        number = parsed;
-      }
+  private applyPublicTrackingFilters(shipment: Shipment): Shipment {
+    this.applyNotesToShipment(shipment, true);
+    if (Array.isArray(shipment.status_history)) {
+      shipment.status_history = shipment.status_history.filter((entry) => !entry.internal);
     }
-    number++;
-    return `${prefix}-${number.toString().padStart(7, '0')}`;
+    return shipment;
   }
 
   private parseName(fullName: string) {
@@ -88,8 +76,6 @@ export class ShipmentService {
   }
 
   async create(createShipmentDto: CreateShipmentDto): Promise<Shipment> {
-    const proNumber = await this.generateProNumber();
-
     let customerId: Types.ObjectId | undefined = createShipmentDto.customer_id
       ? new Types.ObjectId(createShipmentDto.customer_id)
       : undefined;
@@ -134,36 +120,54 @@ export class ShipmentService {
         ]
       : [];
 
+    const pickupTransition =
+      !!createShipmentDto.pickupDate && createShipmentDto.status !== 'delivered';
     const initialStatus =
-      createShipmentDto.status ||
-      (createShipmentDto.pickupDate ? 'in-transit' : 'pending');
+      createShipmentDto.status === 'delivered'
+        ? 'delivered'
+        : pickupTransition
+          ? 'in-transit'
+          : 'pending';
+    const statusHistory = [
+      {
+        status: 'created',
+        note: 'Shipment created',
+        timestamp: new Date(),
+        updatedBy: this.requestContext.getUser()?.email || 'System',
+        internal: false,
+      },
+      ...(pickupTransition
+        ? [
+            {
+              status: 'in-transit',
+              note: 'Pickup confirmed - In Transit',
+              timestamp: new Date(),
+              updatedBy: this.requestContext.getUser()?.email || 'System',
+              internal: false,
+            },
+          ]
+        : []),
+    ];
 
     const shipment = await this.shipmentModel.create({
       ...restCreate,
       notes: initialNotes,
-      proNumber,
       customer_id: customerId,
       status: initialStatus,
       dateOfOrder: new Date(createShipmentDto.dateOfOrder),
       ...(createShipmentDto.pickupDate && {
         pickupDate: new Date(createShipmentDto.pickupDate),
       }),
-      estimatedDeliveryDate: new Date(createShipmentDto.estimatedDeliveryDate),
+      ...(createShipmentDto.estimatedDeliveryDate && {
+        estimatedDeliveryDate: new Date(createShipmentDto.estimatedDeliveryDate),
+      }),
       ...(createShipmentDto.deliveryDate && {
         deliveryDate: new Date(createShipmentDto.deliveryDate),
       }),
       ...(createShipmentDto.quoteId && {
         quote: new Types.ObjectId(createShipmentDto.quoteId),
       }),
-      status_history: [
-        {
-          status: 'created',
-          note: 'Shipment created',
-          timestamp: new Date(),
-          updatedBy: this.requestContext.getUser()?.email || 'System',
-          internal: false,
-        },
-      ],
+      status_history: statusHistory,
     });
 
     // Emit shipment created event
@@ -181,6 +185,29 @@ export class ShipmentService {
         'action',
         new ShipmentCreatedAction(systemUser, shipment, { adminIds }),
       );
+    }
+
+    if (pickupTransition) {
+      const notifChanges = await this.buildShipmentNotifChanges(shipment);
+      try {
+        const user = this.requestContext.getUser();
+        await this.eventEmitter.emitAsync(
+          'action',
+          new ShipmentStatusUpdatedAction(user, shipment, {
+            oldStatus: 'pending',
+            ...notifChanges,
+          }),
+        );
+      } catch {
+        const systemUser = await this.requestContext.getSystemUser();
+        await this.eventEmitter.emitAsync(
+          'action',
+          new ShipmentStatusUpdatedAction(systemUser, shipment, {
+            oldStatus: 'pending',
+            ...notifChanges,
+          }),
+        );
+      }
     }
 
     // Link documents to this shipment and customer
@@ -218,7 +245,8 @@ export class ShipmentService {
           );
         }
 
-        await this.documentService.emitUploadEmailsForDocuments(validDocIds);
+        // BOL emails are never sent automatically on upload — staff must trigger
+        // them explicitly via the "Send BOL to Customer" action.
       }
     }
 
@@ -227,6 +255,19 @@ export class ShipmentService {
 
   async findAll(query: ShipmentQueryDto): Promise<[Shipment[], number]> {
     const filter: FilterQuery<Shipment> = {};
+
+    if (query.search) {
+      const regex = { $regex: query.search, $options: 'i' };
+      filter.$or = [
+        { ftlWareHouseId: regex },
+        { proNumber: regex },
+        { poNumber: regex },
+        { invoiceNumber: regex },
+        { carrierName: regex },
+        { 'customer.name': regex },
+        { 'customer.email': regex },
+      ];
+    }
 
     if (query.status) {
       if (query.status.includes(',')) {
@@ -327,7 +368,7 @@ export class ShipmentService {
 
     const shipments = await this.shipmentModel
       .find(filter)
-      .sort({ ftlWareHouseId: -1, createdAt: -1 })
+      .sort({ updatedAt: -1 })
       .skip(query.skip)
       .limit(query.pageSize)
       .populate('quote')
@@ -394,9 +435,8 @@ export class ShipmentService {
   }
 
   async findByFtlId(ftlID: string): Promise<Shipment> {
-    // Legacy fallback — searches both proNumber and the old ftlID field
     return this.shipmentModel
-      .findOne({ $or: [{ proNumber: ftlID }, { proNumber: ftlID }] })
+      .findOne({ ftlWareHouseId: ftlID })
       .populate('quote')
       .orFail(new NotFoundException('Shipment not found'));
   }
@@ -405,6 +445,14 @@ export class ShipmentService {
     // Get the old shipment to compare status
     const oldShipment = await this.findOne(id);
     const oldStatus = oldShipment.status;
+
+    if (
+      updateShipmentDto.status === 'in-transit' &&
+      !oldShipment.pickupDate &&
+      !updateShipmentDto.pickupDate
+    ) {
+      delete updateShipmentDto.status;
+    }
 
     // Add structured note (internal or customer-visible)
     if (updateShipmentDto.newNote?.text?.trim()) {
@@ -598,7 +646,7 @@ export class ShipmentService {
 
     if (shipment) {
       return {
-        shipment,
+        shipment: this.applyPublicTrackingFilters(shipment),
         quote: null,
       };
     }
@@ -743,9 +791,7 @@ export class ShipmentService {
 
     if (linked) {
       customerUserId =
-        typeof linked === 'object' && linked._id
-          ? String(linked._id)
-          : String(linked);
+        typeof linked === 'object' && linked._id ? String(linked._id) : String(linked);
     } else {
       const { email } = resolveShipmentCustomerContact(shipment as any, null);
       if (email) {

@@ -33,15 +33,31 @@ export class QuoteRequestService {
 
   async sendQuote(
     id: string,
-    data: { quoteAmount: number; carrier: string; estimatedTransitDays: number; notes?: string },
+    data: {
+      quoteAmount: number;
+      carrier: string;
+      carrierQuoteNumber?: string;
+      estimatedTransitDays: number;
+      notes?: string;
+    },
   ): Promise<{ message: string }> {
-    // Update the quote with the amount and status
-    await this.quoteModel.findByIdAndUpdate(id, {
-      quoteAmount: data.quoteAmount,
-      carrier: data.carrier,
-      estimatedTransitDays: data.estimatedTransitDays,
-      status: QuoteRequestStatus.QUOTED,
-    });
+    // Persist all entered quote data first so the email is always generated
+    // from what was actually saved, never from stale/blank fields.
+    await this.quoteModel
+      .findByIdAndUpdate(
+        id,
+        {
+          quoteAmount: data.quoteAmount,
+          carrier: data.carrier,
+          ...(data.carrierQuoteNumber !== undefined && {
+            carrierQuoteNumber: data.carrierQuoteNumber,
+          }),
+          estimatedTransitDays: data.estimatedTransitDays,
+          status: QuoteRequestStatus.QUOTED,
+        },
+        { new: true },
+      )
+      .orFail(new NotFoundException('Quote request not found'));
 
     const quote = await this.findOne(id);
     const notifChanges = await this.buildQuoteNotifChanges(quote);
@@ -73,6 +89,15 @@ export class QuoteRequestService {
 
   async findAll(query: QuoteRequestQueryDto): Promise<[QuoteRequest[], number]> {
     const filter: FilterQuery<QuoteRequest> = {};
+    if (query.search) {
+      const regex = { $regex: query.search, $options: 'i' };
+      filter.$or = [
+        { tracking_id: regex },
+        { full_name: regex },
+        { email: regex },
+        { company_name: regex },
+      ];
+    }
     if (query.email) {
       filter['email'] = query.email;
     }
@@ -169,11 +194,7 @@ export class QuoteRequestService {
 
   async declineQuote(id: string, feedback: any): Promise<QuoteRequest> {
     const quote = await this.quoteModel
-      .findByIdAndUpdate(
-        id,
-        { status: QuoteRequestStatus.DECLINED, feedback },
-        { new: true },
-      )
+      .findByIdAndUpdate(id, { status: QuoteRequestStatus.DECLINED, feedback }, { new: true })
       .orFail(new NotFoundException('Quote request not found'));
 
     let user: any = null;
@@ -181,10 +202,7 @@ export class QuoteRequestService {
       user = this.requestContext.getUser();
     } catch {}
 
-    await this.eventEmitter.emitAsync(
-      'action',
-      new QuoteFollowUpAction(user, quote),
-    );
+    await this.eventEmitter.emitAsync('action', new QuoteFollowUpAction(user, quote));
 
     return quote.toObject() as QuoteRequest;
   }
@@ -193,6 +211,14 @@ export class QuoteRequestService {
     const quote = await this.quoteModel
       .findById(id)
       .orFail(new NotFoundException('Quote request not found'));
+
+    let estimatedDeliveryDate: Date | undefined;
+    if (data.estimatedDeliveryDate) {
+      estimatedDeliveryDate = new Date(data.estimatedDeliveryDate);
+    } else if (quote.estimatedTransitDays) {
+      estimatedDeliveryDate = new Date();
+      estimatedDeliveryDate.setDate(estimatedDeliveryDate.getDate() + quote.estimatedTransitDays);
+    }
 
     // Create a new shipment from the quote
     const shipment = await this.shipmentModel.create({
@@ -222,21 +248,19 @@ export class QuoteRequestService {
       quote: quote._id,
       quote_tracking_id: quote.tracking_id,
       carrierName: quote.carrier || 'TBD',
-      ftlWareHouseId: await this.sequenceService.getCode(this.shipmentModel, 'FTL', 'ftlWareHouseId'),
-      proNumber: await this.sequenceService.getCode(this.shipmentModel, 'PRO', 'proNumber'),
       dateOfOrder: new Date(),
-      estimatedDeliveryDate: data.estimatedDeliveryDate || quote.delivery_date || new Date(),
-      pickupDate: data.pickupDate,
-      notes: (data.notes || quote.special_instructions)
-        ? [
-            {
-              text: data.notes || quote.special_instructions,
-              internal: false,
-              createdAt: new Date(),
-              createdBy: quote.full_name || 'Customer',
-            },
-          ]
-        : [],
+      ...(estimatedDeliveryDate && { estimatedDeliveryDate }),
+      notes:
+        data.notes || quote.special_instructions
+          ? [
+              {
+                text: data.notes || quote.special_instructions,
+                internal: false,
+                createdAt: new Date(),
+                createdBy: quote.full_name || 'Customer',
+              },
+            ]
+          : [],
       timeSensitive: quote.is_time_sensitive ? 'yes' : 'no',
       status: 'pending',
       status_history: [
@@ -298,9 +322,7 @@ export class QuoteRequestService {
 
     if (linked) {
       customerUserId =
-        typeof linked === 'object' && linked._id
-          ? String(linked._id)
-          : String(linked);
+        typeof linked === 'object' && linked._id ? String(linked._id) : String(linked);
     } else if (quote.email) {
       const user = await this.userService.findByEmailOrDefault(quote.email);
       customerUserId = user?._id?.toString();

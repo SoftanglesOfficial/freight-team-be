@@ -21,6 +21,7 @@ import { DocumentModule } from './document/document.module';
 import { LiveChatModule } from './live-chat/live-chat.module';
 import { RequestContextModule } from './request-context/request-context.module';
 import { GoogleSheetsModule } from './google-sheets/google-sheets.module';
+import { EmailTemplateModule } from './email-template/email-template.module';
 
 @Module({
   imports: [
@@ -65,6 +66,7 @@ import { GoogleSheetsModule } from './google-sheets/google-sheets.module';
     DocumentModule,
     LiveChatModule,
     GoogleSheetsModule,
+    EmailTemplateModule,
   ],
   controllers: [AppController],
 })

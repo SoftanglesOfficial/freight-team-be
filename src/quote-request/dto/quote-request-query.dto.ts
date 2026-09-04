@@ -4,6 +4,14 @@ import { PaginationQuery } from 'src/common/dtos/pagination-query.dto';
 import { QuoteRequestStatus } from '../entities/quote-request.entity';
 
 export class QuoteRequestQueryDto extends PaginationQuery {
+  @ApiProperty({
+    required: false,
+    description: 'Free-text search across tracking ID, full name, email, and company name',
+  })
+  @IsOptional()
+  @IsString()
+  search?: string;
+
   @ApiProperty({ required: false })
   @IsOptional()
   @IsString()

@@ -42,10 +42,10 @@ export class CreateShipmentDto {
   @IsOptional()
   quote_tracking_id?: string;
 
-  @ApiProperty()
+  @ApiProperty({ required: false })
   @IsString()
-  @IsNotEmpty()
-  ftlWareHouseId: string;
+  @IsOptional()
+  ftlWareHouseId?: string;
 
   @ApiProperty({ required: false })
   @IsString()
@@ -56,6 +56,11 @@ export class CreateShipmentDto {
   @IsString()
   @IsOptional()
   poNumber?: string;
+
+  @ApiProperty({ required: false, description: 'Invoice number' })
+  @IsString()
+  @IsOptional()
+  invoiceNumber?: string;
 
   @ApiProperty()
   @IsString()
@@ -81,10 +86,10 @@ export class CreateShipmentDto {
   @IsIn(['pending', 'in-transit', 'delivered'])
   status?: 'pending' | 'in-transit' | 'delivered';
 
-  @ApiProperty()
+  @ApiProperty({ required: false })
   @IsDateString()
-  @IsNotEmpty()
-  estimatedDeliveryDate: string;
+  @IsOptional()
+  estimatedDeliveryDate?: string;
 
   @ApiProperty({ required: false })
   @IsDateString()

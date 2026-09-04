@@ -3,6 +3,7 @@ import { Document, DocumentCategory } from '../entities/document.entity';
 import { RequestUser } from 'src/auth/strategies/jwt.strategy';
 import { Types } from 'mongoose';
 import { ConfigService } from '@nestjs/config';
+import { EmailTemplateService } from 'src/email-template/email-template.service';
 
 export class DocumentUploadedAction extends Action<RequestUser, Document> {
   private readonly configService = new ConfigService();
@@ -123,8 +124,13 @@ export class DocumentUploadedAction extends Action<RequestUser, Document> {
         .build();
     } else if (this.data.category === DocumentCategory.BOL) {
       const pickupDate = shipment?.pickupDate ? this.formatDate(shipment.pickupDate) : '[Date]';
-      emailSubject = `BOL Attached – Pickup Scheduled ${pickupDate}`;
-      emailHtml = this.htmlBuilder
+      const bolRendered = EmailTemplateService.getEffective('bol-send', { customerName, pickupDate });
+      emailSubject = bolRendered
+        ? bolRendered.subject
+        : `BOL Attached – Pickup Scheduled ${pickupDate}`;
+      emailHtml = bolRendered
+        ? bolRendered.html
+        : this.htmlBuilder
         .hello(customerName)
         .line(`Thank you for your order.`)
         .line(

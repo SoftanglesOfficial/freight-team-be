@@ -99,7 +99,13 @@ export class QuoteRequestController extends BaseController {
     @Param('id') id: string,
     @Req() req: Request,
     @Body()
-    data: { quoteAmount: number; carrier: string; estimatedTransitDays: number; notes?: string },
+    data: {
+      quoteAmount: number;
+      carrier: string;
+      carrierQuoteNumber?: string;
+      estimatedTransitDays: number;
+      notes?: string;
+    },
   ): Promise<{ message: string }> {
     await this.authorize(req.user.roles.includes(Role.SUPER_ADMIN));
     return this.quoteRequestService.sendQuote(id, data);

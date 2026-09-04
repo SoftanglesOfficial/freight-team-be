@@ -7,6 +7,42 @@ import { ShipmentStatusUpdatedAction } from 'src/shipment/actions/shipment-statu
 import { RequestContextService } from 'src/request-context/request-context.service';
 import * as cron from 'node-cron';
 
+export interface GoogleSheetRow {
+  proNumber: string;
+  ftlWareHouseId?: string;
+  orderNumber?: string;
+  invoiceNumber?: string;
+  status?: string;
+  pickupDate?: string;
+  eta?: string;
+  actualDelivered?: string;
+  notes?: string;
+  customerName?: string;
+  customerEmail?: string;
+  customerPhone?: string;
+  companyName?: string;
+}
+
+const STATUS_ALIASES: Record<string, 'pending' | 'in-transit' | 'delivered'> = {
+  pending: 'pending',
+  'not started': 'pending',
+  created: 'pending',
+  scheduled: 'pending',
+  'in transit': 'in-transit',
+  'in-transit': 'in-transit',
+  shipped: 'in-transit',
+  'picked up': 'in-transit',
+  'en route': 'in-transit',
+  dispatched: 'in-transit',
+  delivered: 'delivered',
+  complete: 'delivered',
+  completed: 'delivered',
+};
+
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 @Injectable()
 export class GoogleSheetsService implements OnModuleInit {
   private readonly logger = new Logger(GoogleSheetsService.name);
@@ -21,16 +57,15 @@ export class GoogleSheetsService implements OnModuleInit {
 
   onModuleInit() {
     if (!this.SHEET_ID) {
-      this.logger.warn(
-        'GOOGLE_SHEETS_SPREADSHEET_ID not set — Google Sheets sync disabled',
-      );
+      this.logger.warn('GOOGLE_SHEETS_SPREADSHEET_ID not set — Google Sheets sync disabled');
       return;
     }
 
     // Run immediately on startup
     this.syncFromCsv();
 
-    // Schedule every 15 minutes
+    // Schedule every 15 minutes — belt-and-suspenders behind the Apps Script
+    // webhook, in case an edit fires while Apps Script is unreachable.
     cron.schedule('*/15 * * * *', () => {
       this.logger.log('Running scheduled Google Sheets CSV sync...');
       this.syncFromCsv();
@@ -65,11 +100,11 @@ export class GoogleSheetsService implements OnModuleInit {
     }
   }
 
-  async syncFromWebhook(rows: any[]): Promise<{ updated: number; skipped: number }> {
+  async syncFromWebhook(rows: GoogleSheetRow[]): Promise<{ updated: number; skipped: number }> {
     return this.processRows(rows);
   }
 
-  private async processRows(rows: any[]): Promise<{ updated: number; skipped: number }> {
+  private async processRows(rows: GoogleSheetRow[]): Promise<{ updated: number; skipped: number }> {
     let updated = 0;
     let skipped = 0;
 
@@ -80,15 +115,35 @@ export class GoogleSheetsService implements OnModuleInit {
         continue;
       }
 
-      const escapedPro = proNumber.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const ftlWareHouseId = row.ftlWareHouseId?.toString().trim();
+      const orderNumber = row.orderNumber?.toString().trim();
+      const invoiceNumber = row.invoiceNumber?.toString().trim();
 
-      // Find the existing shipment
-      const existing = await this.shipmentModel.findOne({
-        $or: [
-          { proNumber: { $regex: `^${escapedPro}$`, $options: 'i' } },
-          { ftlWareHouseId: { $regex: `^${escapedPro}$`, $options: 'i' } },
-        ],
-      });
+      // Match the sheet row to a shipment by whichever identifier(s) it carries —
+      // PRO # is the primary key, but Order #, FTL Warehouse ID, and Invoice #
+      // are all accepted so staff can key off whatever the Sheet already uses.
+      const matchConditions: Record<string, unknown>[] = [
+        { proNumber: { $regex: `^${escapeRegex(proNumber)}$`, $options: 'i' } },
+        { ftlWareHouseId: { $regex: `^${escapeRegex(proNumber)}$`, $options: 'i' } },
+      ];
+      if (ftlWareHouseId) {
+        matchConditions.push({
+          ftlWareHouseId: { $regex: `^${escapeRegex(ftlWareHouseId)}$`, $options: 'i' },
+        });
+      }
+      if (orderNumber) {
+        matchConditions.push(
+          { poNumber: { $regex: `^${escapeRegex(orderNumber)}$`, $options: 'i' } },
+          { ftlWareHouseId: { $regex: `^${escapeRegex(orderNumber)}$`, $options: 'i' } },
+        );
+      }
+      if (invoiceNumber) {
+        matchConditions.push({
+          invoiceNumber: { $regex: `^${escapeRegex(invoiceNumber)}$`, $options: 'i' },
+        });
+      }
+
+      const existing = await this.shipmentModel.findOne({ $or: matchConditions });
 
       if (!existing) {
         skipped++;
@@ -107,39 +162,84 @@ export class GoogleSheetsService implements OnModuleInit {
         }
       }
 
-      // Actual Delivered → deliveryDate + auto status Delivered
+      // Order # / Invoice # — fill in gaps only. Never overwrite a value staff
+      // already entered manually on the site (same rule as PRO # / FTL ID).
+      if (orderNumber && !existing.poNumber) {
+        updateData.poNumber = orderNumber;
+      }
+      if (invoiceNumber && !existing.invoiceNumber) {
+        updateData.invoiceNumber = invoiceNumber;
+      }
+
+      // Pickup Date — fill in gaps only, same reasoning.
+      if (row.pickupDate && !existing.pickupDate) {
+        const pickup = new Date(row.pickupDate);
+        if (!isNaN(pickup.getTime())) {
+          updateData.pickupDate = pickup;
+        }
+      }
+
+      // Customer / account info — fill in gaps only, same reasoning.
+      const customerName = row.customerName?.toString().trim();
+      const customerEmail = row.customerEmail?.toString().trim();
+      const customerPhone = row.customerPhone?.toString().trim();
+      const companyName = row.companyName?.toString().trim();
+      if (customerName && !existing.customer?.name) {
+        updateData['customer.name'] = customerName;
+      }
+      if (customerEmail && !existing.customer?.email) {
+        updateData['customer.email'] = customerEmail;
+      }
+      if (customerPhone && !existing.customer?.phone) {
+        updateData['customer.phone'] = customerPhone;
+      }
+      if (companyName && !existing.customer?.company_name) {
+        updateData['customer.company_name'] = companyName;
+      }
+
+      // Status sync. Priority (highest wins), same as manual edits on the site:
+      //   1. Actual Delivered filled in       → delivered
+      //   2. Explicit Status column            → whatever it says
+      //   3. Pickup Date filled in for the first time → in-transit
+      let nextStatus: 'pending' | 'in-transit' | 'delivered' | undefined;
+      let statusNote: string | undefined;
+
+      if (updateData.pickupDate && existing.status !== 'delivered') {
+        nextStatus = 'in-transit';
+        statusNote = 'Pickup confirmed - In Transit (synced from spreadsheet)';
+      }
+
+      const rawStatus = row.status?.toString().trim().toLowerCase();
+      if (rawStatus) {
+        const mapped = STATUS_ALIASES[rawStatus];
+        if (mapped) {
+          nextStatus = mapped;
+          statusNote = `Status synced from spreadsheet: ${mapped}`;
+        } else {
+          this.logger.warn(`Unrecognized status "${row.status}" for ${proNumber} — ignoring`);
+        }
+      }
+
       if (row.actualDelivered && !existing.deliveryDate) {
         const deliveredDate = new Date(row.actualDelivered);
         if (!isNaN(deliveredDate.getTime())) {
           updateData.deliveryDate = deliveredDate;
-          updateData.status = 'delivered';
-          historyEntries.push({
-            status: 'delivered',
-            note: 'Shipment delivered - synced from spreadsheet',
-            timestamp: new Date(),
-            updatedBy: 'Google Sheets Sync',
-          });
+          nextStatus = 'delivered';
+          statusNote = 'Shipment delivered - synced from spreadsheet';
         }
       }
 
-      // Pickup Date → auto status In Transit
-      if (row.pickupDate && !existing.pickupDate) {
-        const pickupDate = new Date(row.pickupDate);
-        if (!isNaN(pickupDate.getTime())) {
-          updateData.pickupDate = pickupDate;
-          if (updateData.status !== 'delivered') {
-            updateData.status = 'in-transit';
-            historyEntries.push({
-              status: 'in-transit',
-              note: 'Pickup confirmed - synced from spreadsheet',
-              timestamp: new Date(),
-              updatedBy: 'Google Sheets Sync',
-            });
-          }
-        }
+      if (nextStatus && nextStatus !== existing.status) {
+        updateData.status = nextStatus;
+        historyEntries.push({
+          status: nextStatus,
+          note: statusNote,
+          timestamp: new Date(),
+          updatedBy: 'Google Sheets Sync',
+        });
       }
 
-      // Notes → $push only when sheet note differs from the last note
+      // Notes → $push only when the sheet note differs from the last note
       let notePushed = false;
       if (row.notes) {
         const rawNotes = (existing as any).notes;
@@ -225,37 +325,50 @@ export class GoogleSheetsService implements OnModuleInit {
     return { updated, skipped };
   }
 
-  private parseCsv(csv: string): any[] {
+  private parseCsv(csv: string): GoogleSheetRow[] {
     const lines = csv.split('\n').filter((line) => line.trim());
     if (lines.length < 2) return [];
 
     const headers = this.parseCsvLine(lines[0]);
+    const norm = (h: string) => h.trim().toUpperCase();
 
-    // Find column indexes
-    const proCol = headers.findIndex((h) => h.trim().toUpperCase() === 'PRO');
-    const etaCol = headers.findIndex((h) => h.trim().toUpperCase() === 'ETA');
+    const findCol = (...names: string[]) =>
+      headers.findIndex((h) => names.includes(norm(h)));
+
+    const proCol = findCol('PRO');
+    const ftlCol = findCol('FTL', 'FTL WAREHOUSE ID', 'FTL #', 'FTL NUMBER');
+    const orderCol = findCol('ORDER #', 'ORDER NUMBER', 'ORDER', 'PO', 'PO NUMBER', 'PO #');
+    const invoiceCol = findCol('INVOICE #', 'INVOICE NUMBER', 'INVOICE', 'INV#', 'INV #');
+    const statusCol = findCol('STATUS');
+    const pickupDateCol = findCol(
+      'PICKUP DATE',
+      'PICKUP',
+      'ACTUAL PU DATE',
+      'ACTUAL PICKUP DATE',
+    );
+    const etaCol = findCol('ETA');
     const actualDeliveredCol = headers.findIndex((h) =>
       h.trim().toLowerCase().includes('actual delivered'),
     );
-    const pickupDateCol = headers.findIndex(
-      (h) =>
-        h.trim().toLowerCase().includes('actual pu dat') ||
-        h.trim().toLowerCase().includes('pickup date'),
+    const notesCol = findCol('NOTES');
+    const customerNameCol = findCol(
+      'CUSTOMER',
+      'CUSTOMER NAME',
+      'CUSTOMER - BILL TO',
+      'BILL TO',
     );
-    const notesCol = headers.findIndex((h) => h.trim().toUpperCase() === 'NOTES');
+    const customerEmailCol = findCol('CUSTOMER EMAIL', 'EMAIL');
+    const customerPhoneCol = findCol('CUSTOMER PHONE', 'PHONE', 'PH #', 'PH#');
+    const companyCol = findCol('COMPANY', 'COMPANY NAME');
 
     if (proCol === -1) {
       this.logger.error('PRO column not found in CSV headers');
       return [];
     }
 
-    const rows: Array<{
-      proNumber: string;
-      eta: string;
-      actualDelivered: string;
-      pickupDate: string;
-      notes: string;
-    }> = [];
+    const get = (cols: string[], col: number) => (col !== -1 ? cols[col]?.trim() : undefined);
+
+    const rows: GoogleSheetRow[] = [];
     for (let i = 1; i < lines.length; i++) {
       const cols = this.parseCsvLine(lines[i]);
       const proNumber = cols[proCol]?.trim();
@@ -263,10 +376,18 @@ export class GoogleSheetsService implements OnModuleInit {
 
       rows.push({
         proNumber,
-        eta: etaCol !== -1 ? cols[etaCol]?.trim() : '',
-        actualDelivered: actualDeliveredCol !== -1 ? cols[actualDeliveredCol]?.trim() : '',
-        pickupDate: pickupDateCol !== -1 ? cols[pickupDateCol]?.trim() : '',
-        notes: notesCol !== -1 ? cols[notesCol]?.trim() : '',
+        ftlWareHouseId: get(cols, ftlCol),
+        orderNumber: get(cols, orderCol),
+        invoiceNumber: get(cols, invoiceCol),
+        status: get(cols, statusCol),
+        pickupDate: get(cols, pickupDateCol),
+        eta: get(cols, etaCol),
+        actualDelivered: get(cols, actualDeliveredCol),
+        notes: get(cols, notesCol),
+        customerName: get(cols, customerNameCol),
+        customerEmail: get(cols, customerEmailCol),
+        customerPhone: get(cols, customerPhoneCol),
+        companyName: get(cols, companyCol),
       });
     }
 

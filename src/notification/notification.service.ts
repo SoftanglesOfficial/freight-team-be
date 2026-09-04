@@ -64,6 +64,21 @@ export class NotificationService {
     ]);
   }
 
+  async markAllSeen(user_id: string): Promise<{ modified: number }> {
+    const result = await this.notificationModel.updateMany(
+      { user: new Types.ObjectId(user_id), seen: false },
+      { $set: { seen: true } },
+    );
+    return { modified: result.modifiedCount };
+  }
+
+  async clearAll(user_id: string): Promise<{ deleted: number }> {
+    const result = await this.notificationModel.deleteMany({
+      user: new Types.ObjectId(user_id),
+    });
+    return { deleted: result.deletedCount };
+  }
+
   async findOne(id: string): Promise<Notification> {
     return await this.notificationModel
       .findById(new Types.ObjectId(id))

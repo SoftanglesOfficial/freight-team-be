@@ -34,11 +34,11 @@ export class DocumentController extends BaseController {
     return this.documentService.create(createDocumentDto);
   }
 
-  @Roles(Role.SUPER_ADMIN)
+  @Roles(Role.SUPER_ADMIN, Role.STANDARD_USER)
   @Post('/parse-bol', {
     response: Object,
     status: HttpStatus.OK,
-    description: 'Parse a BOL PDF and extract shipment fields (Super Admin only)',
+    description: 'Parse a BOL PDF and extract shipment fields',
   })
   @UseInterceptors(FileInterceptor('file'))
   @ApiConsumes('multipart/form-data')

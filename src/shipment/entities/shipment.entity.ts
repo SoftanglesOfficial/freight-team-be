@@ -234,16 +234,23 @@ export class Shipment extends Entity {
   @Prop({ type: String, required: false, trim: true })
   ftlWareHouseId?: string;
 
-  @ApiProperty()
-  @IsNotEmpty()
-  @Prop({ type: String, required: true, unique: true, index: true })
-  proNumber: string;
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  @Prop({ type: String, required: false, trim: true })
+  proNumber?: string;
 
   @ApiProperty({ required: false, description: 'Customer PO number' })
   @IsOptional()
   @IsString()
   @Prop({ type: String, required: false, index: true })
   poNumber?: string;
+
+  @ApiProperty({ required: false, description: 'Invoice number' })
+  @IsOptional()
+  @IsString()
+  @Prop({ type: String, required: false, index: true })
+  invoiceNumber?: string;
 
   @ApiProperty()
   @IsNotEmpty()
@@ -260,10 +267,10 @@ export class Shipment extends Entity {
   @Prop({ type: Date, required: false })
   pickupDate?: Date;
 
-  @ApiProperty()
-  @IsNotEmpty()
-  @Prop({ type: Date, required: true })
-  estimatedDeliveryDate: Date;
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @Prop({ type: Date, required: false })
+  estimatedDeliveryDate?: Date;
 
   @ApiProperty({ required: false })
   @IsOptional()
@@ -353,3 +360,10 @@ export class Shipment extends Entity {
 }
 
 export const ShipmentSchema = SchemaFactory.createForClass(Shipment);
+ShipmentSchema.index(
+  { proNumber: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { proNumber: { $type: 'string', $gt: '' } },
+  },
+);

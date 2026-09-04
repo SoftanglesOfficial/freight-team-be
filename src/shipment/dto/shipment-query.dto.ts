@@ -3,6 +3,14 @@ import { IsOptional, IsString, IsDateString } from 'class-validator';
 import { PaginationQuery } from 'src/common/dtos/pagination-query.dto';
 
 export class ShipmentQueryDto extends PaginationQuery {
+  @ApiProperty({
+    required: false,
+    description: 'Free-text search across FTL #, PRO #, PO #, carrier, and customer name/email',
+  })
+  @IsOptional()
+  @IsString()
+  search?: string;
+
   @ApiProperty({ required: false })
   @IsOptional()
   @IsString()

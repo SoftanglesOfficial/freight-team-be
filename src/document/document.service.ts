@@ -108,15 +108,8 @@ export class DocumentService {
         );
       }
 
-      // Email when already linked to a shipment (edit flow). Create-shipment flow
-      // uploads BOL first, then links on save — emails fire from shipment.service.
-      if (createDocumentDto.shipment_id) {
-        try {
-          await this.emitUploadEmailsForDocuments([savedDocument._id]);
-        } catch (error) {
-          console.error('Failed to emit DocumentUploadedAction:', error.message);
-        }
-      }
+      // BOL emails are never sent automatically on upload — staff must trigger
+      // them explicitly via the "Send BOL to Customer" action (sendBolEmail).
 
       return savedDocument;
     } catch (error) {

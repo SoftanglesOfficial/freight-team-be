@@ -231,7 +231,11 @@ export class UserService {
     if (query.role) {
       filter.roles = { $in: [query.role] };
     }
-    const records = await this.userModel.find(filter).skip(skip).limit(pageSize);
+    const records = await this.userModel
+      .find(filter)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(pageSize);
     const count = await this.userModel.countDocuments(filter);
     return [records, count];
   }

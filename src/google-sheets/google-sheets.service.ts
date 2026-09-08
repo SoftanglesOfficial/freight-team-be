@@ -93,7 +93,20 @@ export class GoogleSheetsService implements OnModuleInit {
         return { updated: 0, skipped: 0 };
       }
 
-      return await this.processRows(rows);
+      // Sheet can have thousands of historical rows. Only process rows that
+      // match an identifier we already have in Mongo — otherwise sync-now
+      // times out behind the reverse proxy and the browser shows CORS/failed
+      // fetch noise instead of a clean JSON response.
+      const relevantRows = await this.filterRowsToKnownShipments(rows);
+      this.logger.log(
+        `CSV sync: ${rows.length} sheet rows → ${relevantRows.length} match known shipments`,
+      );
+
+      if (relevantRows.length === 0) {
+        return { updated: 0, skipped: rows.length };
+      }
+
+      return await this.processRows(relevantRows);
     } catch (error) {
       this.logger.error('CSV sync error:', (error as Error).message);
       return { updated: 0, skipped: 0 };
@@ -102,6 +115,43 @@ export class GoogleSheetsService implements OnModuleInit {
 
   async syncFromWebhook(rows: GoogleSheetRow[]): Promise<{ updated: number; skipped: number }> {
     return this.processRows(rows);
+  }
+
+  private async filterRowsToKnownShipments(rows: GoogleSheetRow[]): Promise<GoogleSheetRow[]> {
+    const shipments = await this.shipmentModel
+      .find({})
+      .select('proNumber ftlWareHouseId poNumber invoiceNumber')
+      .lean();
+
+    const known = new Set<string>();
+    for (const shipment of shipments) {
+      for (const value of [
+        shipment.proNumber,
+        shipment.ftlWareHouseId,
+        shipment.poNumber,
+        shipment.invoiceNumber,
+      ]) {
+        const trimmed = value?.toString().trim().toLowerCase();
+        if (trimmed) known.add(trimmed);
+      }
+    }
+
+    if (known.size === 0) {
+      return [];
+    }
+
+    return rows.filter((row) => {
+      const candidates = [
+        row.proNumber,
+        row.ftlWareHouseId,
+        row.orderNumber,
+        row.invoiceNumber,
+      ];
+      return candidates.some((value) => {
+        const trimmed = value?.toString().trim().toLowerCase();
+        return !!trimmed && known.has(trimmed);
+      });
+    });
   }
 
   private async processRows(rows: GoogleSheetRow[]): Promise<{ updated: number; skipped: number }> {

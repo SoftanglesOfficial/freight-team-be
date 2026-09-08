@@ -3,8 +3,10 @@ import { GoogleSheetsService } from './google-sheets.service';
 describe('GoogleSheetsService shipment dates', () => {
   const shipmentModel = {
     findOne: jest.fn(),
+    find: jest.fn(),
     updateOne: jest.fn().mockResolvedValue(undefined),
     findById: jest.fn(),
+    collection: { updateOne: jest.fn().mockResolvedValue(undefined) },
   };
   const eventEmitter = { emitAsync: jest.fn() };
   const requestContext = { getSystemUser: jest.fn() };
@@ -217,5 +219,50 @@ describe('GoogleSheetsService shipment dates', () => {
       { _id: 'shipment-1' },
       { $set: { 'customer.email': 'sheet@example.com' } },
     );
+  });
+
+  it('CSV sync only processes rows that match known shipment identifiers', async () => {
+    process.env.GOOGLE_SHEETS_SPREADSHEET_ID = 'sheet-test-id';
+    const csvService = new GoogleSheetsService(
+      shipmentModel as any,
+      eventEmitter as any,
+      requestContext as any,
+    );
+
+    const csv = [
+      'PRO,ETA,NOTES',
+      'UNKNOWN-1,2026-08-12,skip me',
+      'PRO-123,2026-08-15,keep me',
+      'UNKNOWN-2,2026-08-12,skip me too',
+    ].join('\n');
+
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      text: async () => csv,
+    }) as any;
+
+    shipmentModel.find.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockResolvedValue([
+        { proNumber: 'PRO-123', ftlWareHouseId: null, poNumber: null, invoiceNumber: null },
+      ]),
+    });
+    shipmentModel.findOne.mockResolvedValue({
+      _id: 'shipment-1',
+      proNumber: 'PRO-123',
+      status: 'pending',
+      status_history: [],
+      notes: [],
+    });
+
+    const result = await csvService.syncFromCsv();
+
+    expect(shipmentModel.findOne).toHaveBeenCalledTimes(1);
+    expect(shipmentModel.findOne).toHaveBeenCalledWith({
+      $or: expect.arrayContaining([
+        { proNumber: { $regex: '^PRO-123$', $options: 'i' } },
+      ]),
+    });
+    expect(result.updated + result.skipped).toBe(1);
   });
 });
